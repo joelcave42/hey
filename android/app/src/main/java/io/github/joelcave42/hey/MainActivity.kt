@@ -1,6 +1,12 @@
 package io.github.joelcave42.hey
 
 import android.Manifest
+import android.provider.Settings
+import android.os.PowerManager
+import android.content.Intent
+import android.content.ClipData
+import android.content.ActivityNotFoundException
+import android.annotation.SuppressLint
 import android.app.StatusBarManager
 import android.content.ClipboardManager
 import android.content.ComponentName
@@ -66,6 +72,7 @@ private fun HeyApp(activity: ComponentActivity) {
     val history by History.entries(context).collectAsState()
     val receiveConnected by ReceiveService.connected.collectAsState()
     var receiving by remember { mutableStateOf(ReceiveService.isEnabled(context)) }
+    var batteryLimited by remember { mutableStateOf(batteryLimited(context)) }
 
     fun say(message: String) = scope.launch { snackbar.showSnackbar(message) }
 
@@ -104,6 +111,7 @@ private fun HeyApp(activity: ComponentActivity) {
     LifecycleResumeEffect(pc?.token) {
         check()
         ReceiveService.start(context)
+        batteryLimited = batteryLimited(context)
         onPauseOrDispose { }
     }
 
@@ -140,6 +148,7 @@ private fun HeyApp(activity: ComponentActivity) {
         history = history.orEmpty(),
         receiving = receiving,
         receiveConnected = receiveConnected,
+        batteryLimited = batteryLimited,
         snackbar = snackbar,
         actions = HomeActions(
             retry = ::check,
@@ -154,6 +163,37 @@ private fun HeyApp(activity: ComponentActivity) {
             pickFiles = { pickFiles.launch(arrayOf("*/*")) },
             sendText = { SendService.startText(context, it) },
             resend = { entry -> entry.text?.let { SendService.startText(context, it) } },
+            open = { entry ->
+                val intent = when {
+                    entry.uri != null -> Intent(Intent.ACTION_VIEW)
+                        .setDataAndType(Uri.parse(entry.uri), entry.mime ?: "*/*")
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    else -> Regex("""https?://\S+""").find(entry.text.orEmpty())?.value
+                        ?.let { Intent(Intent.ACTION_VIEW, Uri.parse(it)) }
+                }
+                try {
+                    intent?.let { context.startActivity(it) }
+                } catch (_: ActivityNotFoundException) {
+                    say("No app on this phone can open that.")
+                } catch (_: SecurityException) {
+                    say("That file isn't in Download/Hey anymore.")
+                }
+            },
+            copy = { entry ->
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("From your PC", entry.text.orEmpty()))
+                if (Build.VERSION.SDK_INT < 33) say("Copied")
+            },
+            allowBackground = {
+                @SuppressLint("BatteryLife")
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                    .setData(Uri.parse("package:${context.packageName}"))
+                try {
+                    context.startActivity(intent)
+                } catch (_: ActivityNotFoundException) {
+                    context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                }
+            },
             rename = { name ->
                 pc = current.copy(nickname = name).also { it.save(context) }
             },
@@ -174,6 +214,10 @@ private fun HeyApp(activity: ComponentActivity) {
         ),
     )
 }
+
+/** Whether Android may pause Hey in the background to save battery. */
+private fun batteryLimited(context: Context): Boolean =
+    !context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
 
 private fun sendFiles(context: Context, uris: List<Uri>) {
     if (uris.isNotEmpty()) SendService.start(context, uris)

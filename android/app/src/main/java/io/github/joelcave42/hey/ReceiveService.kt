@@ -201,7 +201,7 @@ class ReceiveService : Service() {
             throw e
         }
         contentResolver.update(uri, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
-        History.addFiles(this, listOf(name), incoming = true)
+        History.addReceivedFile(this, name, uri.toString(), mime)
 
         val open = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         val kind = when {

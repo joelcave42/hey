@@ -33,6 +33,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.BatteryAlert
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.NorthEast
+import androidx.compose.material.icons.rounded.SouthWest
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.layout.offset
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.automirrored.rounded.AddToHomeScreen
 import androidx.compose.material.icons.rounded.ContentPaste
@@ -108,6 +115,11 @@ class HomeActions(
     val pickFiles: () -> Unit,
     val sendText: (String) -> Unit,
     val resend: (History.Entry) -> Unit,
+    /** Opens a received link or file. */
+    val open: (History.Entry) -> Unit,
+    /** Copies received text to the phone's clipboard. */
+    val copy: (History.Entry) -> Unit,
+    val allowBackground: () -> Unit,
     val rename: (String) -> Unit,
     val addTile: (() -> Unit)?,
     val clearHistory: () -> Unit,
@@ -123,10 +135,13 @@ fun HomeScreen(
     history: List<History.Entry>,
     receiving: Boolean,
     receiveConnected: Boolean,
+    /** Android is limiting Hey in the background, so receiving may stop. */
+    batteryLimited: Boolean,
     snackbar: SnackbarHostState,
     actions: HomeActions,
 ) {
     var typing by rememberSaveable { mutableStateOf(false) }
+    var filter by rememberSaveable { mutableStateOf(Filter.All) }
     var renaming by rememberSaveable { mutableStateOf(false) }
     var confirmUnpair by rememberSaveable { mutableStateOf(false) }
 
@@ -154,6 +169,9 @@ fun HomeScreen(
         ) {
             item { PcCard(pc, status, onClick = actions.retry) }
             item { ReceiveRow(receiving, receiveConnected, actions.setReceiving) }
+            if (receiving && batteryLimited) {
+                item { BatteryCard(actions.allowBackground) }
+            }
             item { Spacer(Modifier.height(4.dp)) }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -168,17 +186,32 @@ fun HomeScreen(
                 }
             }
             item {
-                Text(
-                    "Recent",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 16.dp, bottom = 2.dp, start = 4.dp),
-                )
+                ) {
+                    Text(
+                        "Activity",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Filter.entries.forEach { f ->
+                        FilterChip(
+                            selected = filter == f,
+                            onClick = { filter = f },
+                            label = { Text(f.label) },
+                            shape = RoundedCornerShape(50),
+                            modifier = Modifier.padding(start = 6.dp),
+                        )
+                    }
+                }
             }
-            if (history.isEmpty()) {
-                item { EmptyRecent() }
+            val shown = history.filter { filter.matches(it) }
+            if (shown.isEmpty()) {
+                item { EmptyActivity(filter) }
             } else {
-                items(history, key = { it.time }) { entry -> RecentRow(entry, actions.resend) }
+                items(shown, key = { it.time }) { entry -> ActivityRow(entry, actions) }
             }
         }
     }
@@ -409,8 +442,18 @@ private fun ActionTile(
     }
 }
 
+private enum class Filter(val label: String) {
+    All("All"), Sent("Sent"), Received("Received");
+
+    fun matches(entry: History.Entry) = when (this) {
+        All -> true
+        Sent -> !entry.incoming
+        Received -> entry.incoming
+    }
+}
+
 @Composable
-private fun RecentRow(entry: History.Entry, onResend: (History.Entry) -> Unit) {
+private fun ActivityRow(entry: History.Entry, actions: HomeActions) {
     val (icon, color) = when (entry.kind) {
         History.Kind.Link -> Icons.Rounded.Link to Accent.Clipboard
         History.Kind.Text -> Icons.AutoMirrored.Rounded.Notes to Accent.Type
@@ -419,34 +462,77 @@ private fun RecentRow(entry: History.Entry, onResend: (History.Entry) -> Unit) {
         History.Kind.Video -> Icons.Rounded.Movie to Accent.Photos
         History.Kind.File -> Icons.Rounded.Description to Accent.Files
     }
-    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+    // What tapping does: received links and files open, received text copies,
+    // and anything sent as text can be sent again.
+    val action: Pair<ImageVector, String>? = when {
+        entry.incoming && (entry.kind == History.Kind.Link || entry.uri != null) ->
+            Icons.AutoMirrored.Rounded.OpenInNew to "Open"
+        entry.incoming && entry.text != null -> Icons.Rounded.ContentCopy to "Copy"
+        !entry.incoming && entry.text != null -> Icons.Rounded.Replay to "Send again"
+        else -> null
+    }
+    val onAction = {
+        when (action?.second) {
+            "Open" -> actions.open(entry)
+            "Copy" -> actions.copy(entry)
+            "Send again" -> actions.resend(entry)
+        }
+    }
+    Surface(
+        onClick = onAction,
+        enabled = action != null,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
         ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(color.copy(alpha = 0.16f)),
-            ) {
-                Icon(icon, null, tint = color, modifier = Modifier.size(21.dp))
+            Box {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(color.copy(alpha = 0.16f)),
+                ) {
+                    Icon(icon, null, tint = color, modifier = Modifier.size(21.dp))
+                }
+                // Which way it went: a small arrow on the icon's corner.
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(x = 4.dp, y = 4.dp)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .padding(2.dp)
+                        .clip(CircleShape)
+                        .background(if (entry.incoming) Accent.Files else Accent.Clipboard),
+                ) {
+                    Icon(
+                        if (entry.incoming) Icons.Rounded.SouthWest else Icons.Rounded.NorthEast,
+                        null,
+                        tint = Color.White,
+                        modifier = Modifier.size(10.dp),
+                    )
+                }
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(entry.label, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    (if (entry.incoming) "From PC · " else "") + timeAgo(entry.time),
+                    (if (entry.incoming) "From your PC · " else "Sent · ") + timeAgo(entry.time),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (entry.text != null) {
-                IconButton(onClick = { onResend(entry) }) {
-                    Icon(Icons.Rounded.Replay, "Send again", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (action != null) {
+                IconButton(onClick = onAction) {
+                    Icon(action.first, action.second, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -454,16 +540,41 @@ private fun RecentRow(entry: History.Entry, onResend: (History.Entry) -> Unit) {
 }
 
 @Composable
-private fun EmptyRecent() {
+private fun EmptyActivity(filter: Filter) {
+    val (title, body) = when (filter) {
+        Filter.Received -> "Nothing from your PC yet" to
+            "In the Hey window on your PC, type in the send box or drop files on it."
+        else -> "Nothing sent yet" to "Tap a button above, or in any app tap Share → Hey."
+    }
     Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
-            Text("Nothing sent yet", fontWeight = FontWeight.Medium)
+            Text(title, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(4.dp))
-            Text(
-                "Tap a button above, or in any app tap Share → Hey.",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text(body, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun BatteryCard(onAllow: () -> Unit) {
+    Surface(shape = RoundedCornerShape(22.dp), color = Accent.Warn.copy(alpha = 0.12f)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
+        ) {
+            Icon(Icons.Rounded.BatteryAlert, null, tint = Accent.Warn)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Let Hey run in the background", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text(
+                    "Battery saving may pause receiving while your screen is off.",
+                    fontSize = 12.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = onAllow) { Text("Allow") }
         }
     }
 }

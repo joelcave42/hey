@@ -18,6 +18,9 @@ object History {
         val time: Long,
         /** Came from the PC, rather than sent to it. */
         val incoming: Boolean = false,
+        /** Where a received file was saved, so it can be opened. */
+        val uri: String? = null,
+        val mime: String? = null,
     )
 
     private const val PREFS = "history"
@@ -55,6 +58,11 @@ object History {
         add(context, Entry(kind, label, null, now(), incoming))
     }
 
+    /** A file the PC sent, saved at [uri]. */
+    fun addReceivedFile(context: Context, name: String, uri: String, mime: String) {
+        add(context, Entry(kindOf(name), name, null, now(), incoming = true, uri = uri, mime = mime))
+    }
+
     fun clear(context: Context) {
         entries.value = emptyList()
         save(context, emptyList())
@@ -86,6 +94,8 @@ object History {
                     o.optString("text").ifEmpty { null },
                     o.getLong("time"),
                     o.optBoolean("incoming"),
+                    o.optString("uri").ifEmpty { null },
+                    o.optString("mime").ifEmpty { null },
                 )
             }
         }.getOrDefault(emptyList())
@@ -97,6 +107,7 @@ object History {
             array.put(
                 JSONObject().put("kind", it.kind.name).put("label", it.label)
                     .put("text", it.text ?: "").put("time", it.time).put("incoming", it.incoming)
+                    .put("uri", it.uri ?: "").put("mime", it.mime ?: "")
             )
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("entries", array.toString()).apply()
