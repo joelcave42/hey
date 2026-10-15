@@ -1,9 +1,11 @@
-package com.joelcave.hey
+package io.github.joelcave42.hey
 
+import android.Manifest
 import android.app.StatusBarManager
 import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Bundle
@@ -47,6 +49,13 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { addTile() }
         }
         findViewById<MaterialButton>(R.id.unpair).setOnClickListener { unpair() }
+
+        // For the progress bar while photos and files are sending.
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        }
     }
 
     override fun onResume() {

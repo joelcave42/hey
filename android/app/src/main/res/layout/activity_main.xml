@@ -178,7 +178,7 @@
                 android:background="@drawable/card"
                 android:lineSpacingExtra="4dp"
                 android:padding="20dp"
-                android:text="From any app, tap Share and choose Send to PC. You can also select text and pick Send to PC from the menu."
+                android:text="From any app, tap Share and choose Hey. You can also select text and pick Hey from the menu. Photos and files work too."
                 android:textColor="@color/muted"
                 android:textSize="15sp" />
 

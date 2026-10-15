@@ -1,9 +1,11 @@
 //! The TLS listener phones send to. One connection carries one JSON request
-//! line and gets one JSON reply line.
+//! line (plus, for a file, its bytes) and gets one JSON reply line.
 //!
 //! Requests:
 //!   {"t":"pair","key":"<from QR>","device":"Pixel 8"}  -> {"ok":true,"token":"...","name":"PC"}
 //!   {"t":"text","token":"...","text":"..."}            -> {"ok":true}
+//!   {"t":"file","token":"...","name":"IMG_1.jpg","size":N,"index":0,"count":1}
+//!       followed by exactly N bytes                    -> {"ok":true}
 //!   {"t":"ping","token":"..."}                         -> {"ok":true,"name":"PC"}
 
 use crate::config::{self, Config, Device};
@@ -12,6 +14,7 @@ use rustls::{ServerConfig, ServerConnection, StreamOwned};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -22,8 +25,21 @@ const MAX_REQUEST: u64 = 1 << 20;
 const PAIRING_WINDOW: Duration = Duration::from_secs(10 * 60);
 
 pub enum Event {
-    Received { device: String, text: String },
-    Paired { device: String },
+    Received {
+        device: String,
+        text: String,
+    },
+    Paired {
+        device: String,
+    },
+    /// A file finished arriving. `index` and `count` say where it sits in a
+    /// batch the phone sent together, so the PC can show one notification.
+    File {
+        device: String,
+        path: PathBuf,
+        index: u64,
+        count: u64,
+    },
 }
 
 pub struct Shared {
@@ -68,19 +84,67 @@ fn handle(
     shared: &Shared,
     events: &Sender<Event>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    stream.set_read_timeout(Some(Duration::from_secs(15)))?;
+    stream.set_read_timeout(Some(Duration::from_secs(30)))?;
     let mut tls_stream = StreamOwned::new(ServerConnection::new(tls)?, stream);
+    let mut reader = BufReader::new(&mut tls_stream);
 
     let mut line = String::new();
-    BufReader::new((&mut tls_stream).take(MAX_REQUEST)).read_line(&mut line)?;
+    reader.by_ref().take(MAX_REQUEST).read_line(&mut line)?;
     let request: Value = serde_json::from_str(&line)?;
-    let reply = respond(&request, shared, events);
+    let reply = if request.get("t").and_then(Value::as_str) == Some("file") {
+        receive_file(&request, &mut reader, shared, events)
+    } else {
+        respond(&request, shared, events)
+    };
 
-    tls_stream.write_all(format!("{reply}\n").as_bytes())?;
-    tls_stream.flush()?;
-    tls_stream.conn.send_close_notify();
-    let _ = tls_stream.flush();
+    let stream = reader.into_inner();
+    stream.write_all(format!("{reply}\n").as_bytes())?;
+    stream.flush()?;
+    stream.conn.send_close_notify();
+    let _ = stream.flush();
     Ok(())
+}
+
+fn device_for(request: &Value, shared: &Shared) -> Option<String> {
+    let token = request.get("token").and_then(Value::as_str).unwrap_or("");
+    shared
+        .config
+        .lock()
+        .unwrap()
+        .device_for_token(token)
+        .map(|d| d.name.clone())
+}
+
+fn not_paired() -> Value {
+    json!({"ok": false, "error": "This phone isn't paired with this PC anymore. Pair it again."})
+}
+
+fn receive_file(
+    request: &Value,
+    reader: &mut impl Read,
+    shared: &Shared,
+    events: &Sender<Event>,
+) -> Value {
+    let Some(device) = device_for(request, shared) else {
+        return not_paired();
+    };
+    let number = |name: &str| request.get(name).and_then(Value::as_u64).unwrap_or(0);
+    let name = request
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("file");
+    match crate::files::receive(reader, name, number("size")) {
+        Ok(path) => {
+            let _ = events.send(Event::File {
+                device,
+                path,
+                index: number("index"),
+                count: number("count").max(1),
+            });
+            json!({"ok": true})
+        }
+        Err(e) => json!({"ok": false, "error": format!("Your PC couldn't save {name}: {e}")}),
+    }
 }
 
 fn respond(request: &Value, shared: &Shared, events: &Sender<Event>) -> Value {
@@ -110,14 +174,8 @@ fn respond(request: &Value, shared: &Shared, events: &Sender<Event>) -> Value {
             json!({"ok": true, "token": token, "name": name})
         }
         t @ ("text" | "ping") => {
-            let Some(device) = shared
-                .config
-                .lock()
-                .unwrap()
-                .device_for_token(field("token"))
-                .map(|d| d.name.clone())
-            else {
-                return json!({"ok": false, "error": "This phone isn't paired with this PC anymore. Pair it again."});
+            let Some(device) = device_for(request, shared) else {
+                return not_paired();
             };
             if t == "text" {
                 let text = field("text").to_string();

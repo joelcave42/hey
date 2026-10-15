@@ -1,6 +1,6 @@
 //! Small Windows helpers: notifications, opening links, and the registry.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use windows::Data::Xml::Dom::XmlDocument;
 use windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
 use windows::Win32::Foundation::ERROR_SUCCESS;
@@ -14,7 +14,7 @@ use windows::core::{HSTRING, PCWSTR, w};
 
 /// Notifications from an app without an installer need an app ID registered
 /// under HKCU, which also gives them Hey's name and icon.
-pub const APP_ID: &str = "JoelCave.Hey";
+pub const APP_ID: &str = "joelcave42.Hey";
 const RUN_KEY: PCWSTR = w!(r"Software\Microsoft\Windows\CurrentVersion\Run");
 
 pub fn register_app_id(icon: &Path) {
@@ -81,32 +81,106 @@ pub fn open(target: &str) {
     }
 }
 
-pub fn notify(title: &str, body: &str, link: Option<&str>) {
-    let (launch, actions) = match link {
-        Some(url) => (
-            format!(r#" activationType="protocol" launch="{}""#, xml(url)),
+/// A notification. Buttons and clicks open a URI: a web link, or a
+/// `hey-action:` link that Windows hands back to Hey (see `register_actions`).
+#[derive(Default)]
+pub struct Toast {
+    pub title: String,
+    pub body: String,
+    /// A local image shown large in the notification.
+    pub image: Option<PathBuf>,
+    /// What clicking the notification itself opens.
+    pub launch: Option<String>,
+    /// Up to five (label, URI) buttons.
+    pub buttons: Vec<(String, String)>,
+}
+
+pub fn notify(toast: &Toast) {
+    let launch = toast
+        .launch
+        .as_ref()
+        .map(|uri| format!(r#" activationType="protocol" launch="{}""#, xml(uri)))
+        .unwrap_or_default();
+    let image = toast
+        .image
+        .as_ref()
+        .map(|p| {
             format!(
-                r#"<actions><action content="Open link" activationType="protocol" arguments="{}"/></actions>"#,
-                xml(url)
-            ),
-        ),
-        None => (String::new(), String::new()),
+                r#"<image placement="hero" src="{}"/>"#,
+                xml(&p.to_string_lossy())
+            )
+        })
+        .unwrap_or_default();
+    let buttons: String = toast
+        .buttons
+        .iter()
+        .take(5)
+        .map(|(label, uri)| {
+            format!(
+                r#"<action content="{}" activationType="protocol" arguments="{}"/>"#,
+                xml(label),
+                xml(uri)
+            )
+        })
+        .collect();
+    let actions = if buttons.is_empty() {
+        String::new()
+    } else {
+        format!("<actions>{buttons}</actions>")
     };
-    let toast = format!(
-        r#"<toast{launch}><visual><binding template="ToastGeneric"><text>{}</text><text>{}</text></binding></visual>{actions}</toast>"#,
-        xml(title),
-        xml(body)
+    let body = if toast.body.is_empty() {
+        String::new()
+    } else {
+        format!("<text>{}</text>", xml(&toast.body))
+    };
+    let doc = format!(
+        r#"<toast{launch}><visual><binding template="ToastGeneric"><text>{}</text>{body}{image}</binding></visual>{actions}</toast>"#,
+        xml(&toast.title)
     );
     let show = || -> windows::core::Result<()> {
-        let doc = XmlDocument::new()?;
-        doc.LoadXml(&HSTRING::from(toast))?;
-        let notification = ToastNotification::CreateToastNotification(&doc)?;
+        let xml_doc = XmlDocument::new()?;
+        xml_doc.LoadXml(&HSTRING::from(doc))?;
+        let notification = ToastNotification::CreateToastNotification(&xml_doc)?;
         ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(APP_ID))?
             .Show(&notification)
     };
     if let Err(e) = show() {
         eprintln!("notification failed: {e}");
     }
+}
+
+/// Shorthand for a plain notification with just a title and body.
+pub fn notify_text(title: &str, body: &str) {
+    notify(&Toast {
+        title: title.into(),
+        body: body.into(),
+        ..Default::default()
+    });
+}
+
+/// Registers the `hey-action:` link type, so notification buttons can ask
+/// Hey to copy something or show a file. Windows starts `hey.exe --action
+/// "<link>"`, which does the job and exits.
+pub fn register_actions() {
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let key = r"Software\Classes\hey-action";
+    set_string(key, "", "URL:Hey action");
+    set_string(key, "URL Protocol", "");
+    set_string(
+        &format!(r"{key}\shell\open\command"),
+        "",
+        &format!("\"{}\" --action \"%1\"", exe.display()),
+    );
+}
+
+/// Shows a file selected in File Explorer.
+pub fn reveal(path: &Path) {
+    use std::os::windows::process::CommandExt;
+    let _ = std::process::Command::new("explorer.exe")
+        .raw_arg(format!("/select,\"{}\"", path.display()))
+        .spawn();
 }
 
 fn xml(s: &str) -> String {

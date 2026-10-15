@@ -1,9 +1,10 @@
-package com.joelcave.hey
+package io.github.joelcave42.hey
 
 import android.app.Activity
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -46,12 +47,31 @@ fun sendToPc(context: Context, text: String, onDone: (Boolean) -> Unit = {}) {
 class ShareActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val files = sharedFiles()
+        if (files.isNotEmpty()) {
+            try {
+                if (Pc.load(this) == null) sendToPc(this, "") else SendService.start(this, files)
+            } catch (_: SecurityException) {
+                // The sharing app didn't let us read what it shared.
+                Toast.makeText(this, "That app didn't allow Hey to read the file.", Toast.LENGTH_LONG).show()
+            }
+            finish()
+            return
+        }
         val text = when (intent.action) {
             Intent.ACTION_PROCESS_TEXT -> intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
             else -> intent.getStringExtra(Intent.EXTRA_TEXT)
         }
         sendToPc(this, text.orEmpty())
         finish()
+    }
+
+    /** Photos and files in a share, whether one (SEND) or many (SEND_MULTIPLE). */
+    @Suppress("DEPRECATION")
+    private fun sharedFiles(): List<Uri> = when (intent.action) {
+        Intent.ACTION_SEND -> listOfNotNull(intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
+        Intent.ACTION_SEND_MULTIPLE -> intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM).orEmpty()
+        else -> emptyList()
     }
 }
 

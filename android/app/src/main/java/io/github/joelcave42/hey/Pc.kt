@@ -1,4 +1,4 @@
-package com.joelcave.hey
+package io.github.joelcave42.hey
 
 import android.content.Context
 import android.net.Uri

@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace = "com.joelcave.hey"
+    namespace = "io.github.joelcave42.hey"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.joelcave.hey"
+        applicationId = "io.github.joelcave42.hey"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

@@ -6,19 +6,26 @@
 
 Your friend sends you a Zoom link on your phone, and you need it on your PC.
 Normally that means messaging it to yourself on Discord. With Hey you tap
-**Share → Send to PC** and it's already on your PC's clipboard, with a
+**Share → Hey** and it's already on your PC's clipboard, with a
 notification that opens the link.
 
 ## What it does
 
-- **Share sheet:** in any app, tap **Share → Send to PC**.
-- **Selected text:** select text anywhere and pick **Send to PC** from the menu.
+- **Share sheet:** in any app, tap **Share → Hey**. Links, text, photos,
+  videos and any other file, one or many at once.
+- **Selected text:** select text anywhere and pick **Hey** from the menu.
 - **Clipboard tile:** swipe down, tap **Send clipboard** in quick settings.
-- **On the PC:** whatever arrives is copied to your clipboard and shown in a
-  Windows notification. If it contains a link (even inside a longer message,
-  like a Zoom invite), the notification has an **Open link** button.
-- **Tray menu:** the last 8 things you sent are under **Recent**; click one to
-  copy it again.
+- **Links and text on the PC:** copied to your clipboard and shown in a
+  Windows notification. If there's a link (even inside a longer message, like
+  a Zoom invite), the notification has an **Open link** button.
+- **Photos and files on the PC:** saved to `Downloads\Hey`, with a preview in
+  the notification and **Open** / **Show in folder** buttons. A single photo
+  also lands on your clipboard, so you can paste a screenshot straight into
+  Discord.
+- **Big files keep going:** the phone shows a progress bar and keeps sending
+  after you leave the share sheet.
+- **Tray menu:** the last 8 things you sent are under **Recent**, and
+  **Open Hey folder** opens `Downloads\Hey`.
 
 ## How it works
 
@@ -75,11 +82,13 @@ Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
 | Path | What's there |
 | --- | --- |
 | `windows/src/server.rs` | TLS listener, pairing and request handling |
+| `windows/src/files.rs` | Saves incoming files, thumbnails, photo to clipboard |
 | `windows/src/pairing.rs` | QR pairing page |
 | `windows/src/winutil.rs` | Notifications, registry, opening links |
 | `windows/src/main.rs` | Tray icon, menu and event loop |
 | `android/.../HeyClient.kt` | Pinned TLS client and mDNS discovery |
 | `android/.../Send.kt` | Share target and clipboard sender |
+| `android/.../SendService.kt` | Sends photos and files with a progress bar |
 | `android/.../HeyTileService.kt` | Quick settings tile |
 | `tools/fake_phone.py` | Tests the PC app without a phone |
 
@@ -91,7 +100,7 @@ Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
 - [x] Finds the PC again with mDNS when its IP changes
 
 **v0.2: make the basics feel instant**
-- [ ] Photos and files → PC, saved to `Downloads\Hey`
+- [x] Photos and files → PC, saved to `Downloads\Hey`
 - [ ] Auto-open links as they arrive
 - [ ] Smart actions: phone numbers, addresses, codes and video links get the right button
 

@@ -1,4 +1,4 @@
-package com.joelcave.hey
+package io.github.joelcave42.hey
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -9,7 +9,10 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Base64
 import org.json.JSONObject
+import java.io.BufferedOutputStream
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.security.MessageDigest
@@ -38,15 +41,45 @@ class HeyClient(private val context: Context) {
         request(pc, JSONObject().put("t", "text").put("token", pc.token).put("text", text))
     }
 
+    /**
+     * Sends one file. [index] and [count] place it in a batch so the PC shows
+     * one notification for the lot. [open] is called once per attempt.
+     */
+    fun sendFile(
+        pc: Pc,
+        name: String,
+        size: Long,
+        index: Int,
+        count: Int,
+        open: () -> InputStream,
+        progress: (sent: Long) -> Unit,
+    ) {
+        val body = JSONObject().put("t", "file").put("token", pc.token)
+            .put("name", name).put("size", size).put("index", index).put("count", count)
+        request(pc, body) { out ->
+            open().use { input ->
+                val buffer = ByteArray(64 * 1024)
+                var sent = 0L
+                while (sent < size) {
+                    val n = input.read(buffer, 0, minOf(buffer.size.toLong(), size - sent).toInt())
+                    if (n < 0) throw HeyException("$name got shorter while it was being sent.")
+                    out.write(buffer, 0, n)
+                    sent += n
+                    progress(sent)
+                }
+            }
+        }
+    }
+
     fun ping(pc: Pc) {
         request(pc, JSONObject().put("t", "ping").put("token", pc.token))
     }
 
     /** Tries the PC's known addresses, then looks for it on the network if they've changed. */
-    private fun request(pc: Pc, body: JSONObject): JSONObject {
+    private fun request(pc: Pc, body: JSONObject, payload: ((OutputStream) -> Unit)? = null): JSONObject {
         for (address in pc.addresses) {
             try {
-                return exchange(address, pc.port, pc.fingerprint, body)
+                return exchange(address, pc.port, pc.fingerprint, body, payload)
             } catch (e: HeyException) {
                 throw e
             } catch (_: IOException) {
@@ -57,7 +90,9 @@ class HeyClient(private val context: Context) {
             "Can't find ${pc.name}. Make sure Hey is running on it and you're on the same Wi-Fi."
         )
         val reply = try {
-            exchange(found.first, found.second, pc.fingerprint, body)
+            exchange(found.first, found.second, pc.fingerprint, body, payload)
+        } catch (e: HeyException) {
+            throw e
         } catch (_: IOException) {
             throw HeyException("Found ${pc.name} but couldn't connect. Check Windows Firewall allows Hey.")
         }
@@ -67,7 +102,13 @@ class HeyClient(private val context: Context) {
         return reply
     }
 
-    private fun exchange(host: String, port: Int, fingerprint: String, body: JSONObject): JSONObject {
+    private fun exchange(
+        host: String,
+        port: Int,
+        fingerprint: String,
+        body: JSONObject,
+        payload: ((OutputStream) -> Unit)?,
+    ): JSONObject {
         val raw = Socket()
         raw.connect(InetSocketAddress(host, port), 1500)
         raw.soTimeout = 8000
@@ -76,8 +117,18 @@ class HeyClient(private val context: Context) {
             // A different machine at this address fails the pin check here, and
             // request() moves on to the next address.
             socket.startHandshake()
-            socket.outputStream.write((body.toString() + "\n").toByteArray())
-            socket.outputStream.flush()
+            val out = BufferedOutputStream(socket.outputStream, 64 * 1024)
+            out.write((body.toString() + "\n").toByteArray())
+            if (payload != null) {
+                // Once bytes are flowing, a dropped connection is a real failure,
+                // not a reason to try another address.
+                try {
+                    payload(out)
+                } catch (_: IOException) {
+                    throw HeyException("Lost the connection to your PC while sending. Try again.")
+                }
+            }
+            out.flush()
             val line = socket.inputStream.bufferedReader().readLine() ?: throw IOException("No reply")
             val reply = JSONObject(line)
             if (!reply.optBoolean("ok")) {
