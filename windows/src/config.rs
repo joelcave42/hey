@@ -22,6 +22,9 @@ pub struct Config {
     pub key_der: String,
     #[serde(default)]
     pub devices: Vec<Device>,
+    /// Open links in the browser as soon as they arrive.
+    #[serde(default)]
+    pub auto_open_links: bool,
 }
 
 pub fn dir() -> PathBuf {
@@ -68,6 +71,7 @@ impl Config {
             cert_der: b64(key.cert.der()),
             key_der: b64(&key.signing_key.serialize_der()),
             devices: Vec::new(),
+            auto_open_links: false,
         };
         config.save();
         config

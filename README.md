@@ -24,6 +24,8 @@ notification that opens the link.
   Discord.
 - **Big files keep going:** the phone shows a progress bar and keeps sending
   after you leave the share sheet.
+- **Auto-open links:** tick **Open links automatically** in the tray menu and
+  links open in your browser the moment they arrive.
 - **Tray menu:** the last 8 things you sent are under **Recent**, and
   **Open Hey folder** opens `Downloads\Hey`.
 
@@ -101,7 +103,7 @@ Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
 
 **v0.2: make the basics feel instant**
 - [x] Photos and files → PC, saved to `Downloads\Hey`
-- [ ] Auto-open links as they arrive
+- [x] Auto-open links as they arrive
 - [ ] Smart actions: phone numbers, addresses, codes and video links get the right button
 
 **v0.3: both directions**

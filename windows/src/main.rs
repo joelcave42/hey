@@ -89,6 +89,12 @@ fn main() {
         winutil::starts_with_windows(),
         None,
     );
+    let auto_open = CheckMenuItem::new(
+        "Open links automatically",
+        true,
+        shared.config.lock().unwrap().auto_open_links,
+        None,
+    );
     let quit = MenuItem::new("Quit Hey", true, None);
     let _ = recent.append(&empty);
     let _ = menu.append_items(&[
@@ -100,6 +106,7 @@ fn main() {
         &PredefinedMenuItem::separator(),
         &phones,
         &forget,
+        &auto_open,
         &autostart,
         &PredefinedMenuItem::separator(),
         &quit,
@@ -153,6 +160,10 @@ fn main() {
                 config.save();
                 drop(config);
                 phones.set_text(phone_count(&shared));
+            } else if id == *auto_open.id() {
+                let mut config = shared.config.lock().unwrap();
+                config.auto_open_links = auto_open.is_checked();
+                config.save();
             } else if id == *autostart.id() {
                 winutil::set_start_with_windows(autostart.is_checked());
             } else if id == *quit.id() {
@@ -176,10 +187,14 @@ fn main() {
                 Event::Received { device, text } => {
                     copy(&text);
                     let link = winutil::find_link(&text);
-                    let title = if link.is_some() {
-                        format!("Link from {device}")
-                    } else {
-                        format!("From {device}")
+                    let opened = link.is_some() && shared.config.lock().unwrap().auto_open_links;
+                    if let (true, Some(link)) = (opened, link) {
+                        winutil::open(link);
+                    }
+                    let title = match (link, opened) {
+                        (Some(_), true) => format!("Opened a link from {device}"),
+                        (Some(_), false) => format!("Link from {device}"),
+                        (None, _) => format!("From {device}"),
                     };
                     winutil::notify(&Toast {
                         title,
