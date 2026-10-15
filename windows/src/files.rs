@@ -6,7 +6,19 @@ use std::fs::{self, File};
 use std::io::{self, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
+/// Where received files are saved: the folder chosen in settings, or
+/// Downloads\Hey. Falls back to the default if the chosen one is gone (an
+/// unplugged drive, say).
 pub fn folder() -> PathBuf {
+    if let Some(custom) = crate::config::custom_save_folder()
+        && (custom.is_dir() || fs::create_dir_all(&custom).is_ok())
+    {
+        return custom;
+    }
+    default_folder()
+}
+
+pub fn default_folder() -> PathBuf {
     let dir = dirs::download_dir()
         .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join("Downloads"))
         .join("Hey");

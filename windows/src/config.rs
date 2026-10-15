@@ -28,6 +28,9 @@ pub struct Config {
     /// Open links in the browser as soon as they arrive.
     #[serde(default)]
     pub auto_open_links: bool,
+    /// Where received files go, if not the default Downloads\Hey.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub save_folder: Option<String>,
 }
 
 pub fn dir() -> PathBuf {
@@ -75,6 +78,7 @@ impl Config {
             key_der: b64(&key.signing_key.serialize_der()),
             devices: Vec::new(),
             auto_open_links: false,
+            save_folder: None,
         };
         config.save();
         config
@@ -90,6 +94,18 @@ impl Config {
     pub fn fingerprint(&self) -> String {
         b64(&Sha256::digest(unb64(&self.cert_der)))
     }
+}
+
+/// The custom save folder from the saved settings, read fresh each time so
+/// the notification-button helper process sees changes too.
+pub fn custom_save_folder() -> Option<PathBuf> {
+    #[derive(Deserialize)]
+    struct Only {
+        save_folder: Option<String>,
+    }
+    let text = fs::read_to_string(path()).ok()?;
+    let only: Only = serde_json::from_str(&text).ok()?;
+    only.save_folder.map(PathBuf::from)
 }
 
 pub fn pc_name() -> String {

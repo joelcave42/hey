@@ -20,7 +20,8 @@ notification that opens the link.
 - **Links and text on the PC:** copied to your clipboard and shown in a
   Windows notification. If there's a link (even inside a longer message, like
   a Zoom invite), the notification has an **Open link** button.
-- **Photos and files on the PC:** saved to `Downloads\Hey`, with a preview in
+- **Photos and files on the PC:** saved to `Downloads\Hey` (or any folder you
+  pick in the Hey window), with a preview in
   the notification and **Open** / **Show in folder** buttons. A single photo
   also lands on your clipboard, so you can paste a screenshot straight into
   Discord.

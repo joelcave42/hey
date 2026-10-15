@@ -15,6 +15,7 @@ mdns-sd = "0.21.5"
 png = "0.18.1"
 qrcode = "0.14.1"
 rcgen = { version = "0.14", default-features = false, features = ["crypto", "ring", "pem"] }
+rfd = "0.17.2"
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

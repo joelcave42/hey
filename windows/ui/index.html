@@ -61,6 +61,11 @@ aside { background: var(--side); border-right: 1px solid var(--line); display: f
 .switch.on::after { transform: translateX(16px); }
 .chip-btn { padding: 6px 12px; border-radius: 9px; background: var(--card); box-shadow: var(--shadow); font-weight: 600; font-size: 13px; }
 .chip-btn:hover { background: var(--card-2); }
+.folder-row { padding-bottom: 4px; }
+.folder-row small { white-space: normal !important; word-break: break-all; }
+.reset { color: var(--brand); font-size: 12px; font-weight: 600; padding: 2px 0 0; }
+.reset:hover { text-decoration: underline; }
+.folder-btns { display: flex; gap: 6px; padding: 0 8px 8px; flex-wrap: wrap; }
 .foot { margin-top: auto; padding: 16px 8px 0; font-size: 12px; color: var(--faint); display: flex; justify-content: space-between; }
 .foot a { color: var(--faint); cursor: pointer; text-decoration: none; }
 .foot a:hover { color: var(--brand); }
@@ -131,7 +136,8 @@ header h1 { font: 700 26px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif
     <div class="label">Settings</div>
     <div class="row"><div class="t">Open links automatically<small>Links open as they arrive</small></div><button class="switch" id="auto_open" onclick="toggle('auto_open')" aria-label="Open links automatically"></button></div>
     <div class="row"><div class="t">Start with Windows<small>Hey waits in the tray</small></div><button class="switch" id="autostart" onclick="toggle('autostart')" aria-label="Start with Windows"></button></div>
-    <div class="row"><div class="t">Received files<small id="folderPath"></small></div><button class="chip-btn" onclick="send('openFolder')">Open</button></div>
+    <div class="row folder-row"><div class="t">Save files to<small id="folderPath" title=""></small><button class="reset" id="resetFolder" onclick="send('resetFolder')">Back to Downloads\Hey</button></div></div>
+    <div class="folder-btns"><button class="chip-btn" onclick="send('chooseFolder')">Change…</button><button class="chip-btn" onclick="send('openFolder')">Open</button></div>
   </div>
   <div class="foot"><span id="version"></span><a onclick="send('openUrl',{url:'https://github.com/joelcave42/hey'})">GitHub</a></div>
 </aside>
@@ -250,7 +256,10 @@ function itemHtml(it) {
 function render() {
   const s = state;
   document.getElementById("version").textContent = "Hey " + (s.version || "");
-  document.getElementById("folderPath").textContent = s.settings.folder || "";
+  const folderPath = document.getElementById("folderPath");
+  folderPath.textContent = s.settings.folder || "";
+  folderPath.title = s.settings.folder || "";
+  document.getElementById("resetFolder").style.display = s.settings.custom_folder ? "" : "none";
   document.getElementById("clear").style.display = s.items.length ? "" : "none";
   for (const key of ["auto_open", "autostart"]) document.getElementById(key).classList.toggle("on", !!s.settings[key]);
 

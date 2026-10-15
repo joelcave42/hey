@@ -176,6 +176,23 @@ fn main() {
                 }
                 hey.update(&app.state());
             }
+            WinEvent::UserEvent(UserEvent::Page(message))
+                if message.contains("\"chooseFolder\"") =>
+            {
+                let picked = rfd::FileDialog::new()
+                    .set_title("Choose where Hey saves files from your phone")
+                    .set_directory(files::folder())
+                    .set_parent(&hey.window)
+                    .pick_folder();
+                if let Some(folder) = picked {
+                    app.set_save_folder(Some(folder.to_string_lossy().into_owned()));
+                    hey.toast(&format!(
+                        "Files from your phone will go to {}",
+                        folder.display()
+                    ));
+                }
+                hey.update(&app.state());
+            }
             WinEvent::UserEvent(UserEvent::Page(message)) => {
                 if let Some(reply) = app.on_page(&message) {
                     hey.toast(&reply);
@@ -194,6 +211,12 @@ impl App {
         let link = pairing::link(&self.shared.config.lock().unwrap(), self.port, &key);
         let expires = feed::now_ms() + PAIRING_MINUTES * 60 * 1000;
         self.pairing = Some((link, expires));
+    }
+
+    fn set_save_folder(&mut self, folder: Option<String>) {
+        let mut config = self.shared.config.lock().unwrap();
+        config.save_folder = folder;
+        config.save();
     }
 
     fn cancel_pairing(&mut self) {
@@ -218,6 +241,7 @@ impl App {
                 "auto_open": config.auto_open_links,
                 "autostart": winutil::starts_with_windows(),
                 "folder": files::folder().to_string_lossy(),
+                "custom_folder": config.save_folder.is_some(),
             },
             "items": self.feed.items,
             "pairing": self.pairing.as_ref().map(|(link, expires)| json!({
@@ -326,6 +350,13 @@ impl App {
             ("remove", Some(item)) => {
                 self.feed.remove(item.id);
                 None
+            }
+            ("resetFolder", _) => {
+                self.set_save_folder(None);
+                Some(format!(
+                    "Files will go to {}",
+                    files::default_folder().display()
+                ))
             }
             ("openFolder", _) => {
                 winutil::open(&files::folder().to_string_lossy());
@@ -491,10 +522,15 @@ fn run_action(link: &str) {
         .next()
         .unwrap_or("");
     let path = url::query_param(link, "path").map(PathBuf::from);
+    // The current save folder, or the default one for files from before a change.
     let inside_hey = |p: &Path| {
-        let folder = files::folder().canonicalize().ok();
-        let file = p.canonicalize().ok();
-        matches!((folder, file), (Some(f), Some(p)) if p.starts_with(&f))
+        let Ok(file) = p.canonicalize() else {
+            return false;
+        };
+        [files::folder(), files::default_folder()]
+            .iter()
+            .filter_map(|f| f.canonicalize().ok())
+            .any(|f| file.starts_with(f))
     };
     match (name, path) {
         ("copy", _) => {
