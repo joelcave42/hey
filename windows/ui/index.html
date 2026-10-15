@@ -76,6 +76,21 @@ header { display: flex; align-items: center; gap: 14px; padding: 22px 28px 14px;
 header h1 { font: 700 26px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif; margin: 0; flex: 1; letter-spacing: -.3px; }
 .search { display: flex; align-items: center; gap: 8px; background: var(--card); box-shadow: var(--shadow); border: 1px solid var(--line); border-radius: 12px; padding: 0 12px; width: 260px; color: var(--faint); }
 .search input { border: 0; outline: 0; background: none; color: var(--text); font: inherit; padding: 9px 0; width: 100%; user-select: text; }
+.composer { display: flex; gap: 8px; padding: 0 28px 10px; align-items: stretch; }
+.send-box { flex: 1; display: flex; align-items: center; gap: 10px; background: var(--card); box-shadow: var(--shadow); border: 1px solid var(--line); border-radius: 14px; padding: 5px 5px 5px 14px; color: var(--faint); }
+.send-box:focus-within { border-color: var(--brand); }
+.send-box input { flex: 1; border: 0; outline: 0; background: none; color: var(--text); font: inherit; font-size: 14.5px; user-select: text; min-width: 0; }
+.act.big { padding: 0 14px; border-radius: 14px; background: var(--card); box-shadow: var(--shadow); border: 1px solid var(--line); }
+.composer.off { opacity: .45; pointer-events: none; }
+.hint { padding: 0 30px 10px; font-size: 12.5px; color: var(--warn); display: none; }
+.hint.show { display: block; }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--brand) 15%, transparent); color: var(--brand); margin-right: 6px; }
+.status-sent { color: var(--good); }
+.status-failed { color: var(--bad); }
+.drop { position: fixed; inset: 0; display: none; place-items: center; background: color-mix(in srgb, #6d5dfc 22%, rgba(8,8,14,.6)); z-index: 8; }
+.drop.show { display: grid; }
+.drop > div { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 40px 56px; border-radius: 28px; border: 2.5px dashed rgba(255,255,255,.7); color: #fff; font-size: 20px; }
+.drop svg { width: 48px; height: 48px; }
 .filters { display: flex; gap: 8px; padding: 0 28px 14px; }
 .filter { padding: 6px 14px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); color: var(--muted); font-weight: 600; font-size: 13px; }
 .filter.on { background: var(--text); color: var(--bg); }
@@ -143,14 +158,25 @@ header h1 { font: 700 26px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif
 </aside>
 <main>
   <header>
-    <h1>Received</h1>
-    <button class="chip-btn" id="clear" onclick="if(confirm('Clear the list? Received files stay in Downloads\\Hey.'))send('clear')">Clear</button>
+    <h1>Activity</h1>
+    <button class="chip-btn" id="clear" onclick="if(confirm('Clear the list? Files stay where they were saved.'))send('clear')">Clear</button>
     <label class="search"><svg class="i"><use href="#search"/></svg><input id="q" placeholder="Search" oninput="render()"></label>
   </header>
+  <div class="composer" id="composer">
+    <div class="send-box">
+      <svg class="i"><use href="#phone"/></svg>
+      <input id="msg" placeholder="Send a link or text to your phone…" onkeydown="if(event.key==='Enter')sendMsg()">
+      <button class="act primary" onclick="sendMsg()"><svg class="i"><use href="#send"/></svg>Send</button>
+    </div>
+    <button class="act big" onclick="send('pickFiles')"><svg class="i"><use href="#file"/></svg>Files…</button>
+    <button class="act big" onclick="send('sendClipboard')"><svg class="i"><use href="#copy"/></svg>Clipboard</button>
+  </div>
+  <div class="hint" id="hint"></div>
   <div class="filters" id="filters"></div>
   <div class="feed" id="feed"></div>
 </main>
 <div id="layer"></div>
+<div class="drop" id="drop"><div><svg class="i"><use href="#send"/></svg><b>Drop to send to your phone</b></div></div>
 
 <svg width="0" height="0" style="position:absolute">
   <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
@@ -188,6 +214,12 @@ const FILTERS = [["all", "All"], ["link", "Links"], ["photo", "Photos"], ["file"
 
 function send(cmd, extra) { window.ipc.postMessage(JSON.stringify({ cmd, ...extra })); }
 function toggle(key) { send("set", { key, value: !state.settings[key] }); }
+function sendMsg() {
+  const box = document.getElementById("msg");
+  if (!box.value.trim()) return;
+  send("sendText", { text: box.value });
+  box.value = "";
+}
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function icon(name) { return `<svg class="i"><use href="#${name}"/></svg>`; }
 
@@ -227,7 +259,13 @@ function matches(item) {
 
 function itemHtml(it) {
   const k = KINDS[it.kind] || KINDS.file;
-  const meta = `${esc(it.device)} · ${ago(it.time)}`;
+  let meta = `${esc(it.device)} · ${ago(it.time)}`;
+  if (it.outgoing) {
+    const st = it.status === "sent" ? `<span class="status-sent">Sent ✓</span>`
+      : it.status === "failed" ? `<span class="status-failed">Didn't send${it.error ? ": " + esc(it.error) : ""}</span>`
+      : "Sending…";
+    meta = `<span class="badge">To phone</span>${esc(it.device)} · ${ago(it.time)} · ${st}`;
+  }
   const lead = it.thumb
     ? `<img class="thumb" src="/thumb/${it.id}" alt="" onclick="send('open',{id:${it.id}})">`
     : `<div class="ico" style="background:color-mix(in srgb, ${k.color} 16%, transparent);color:${k.color}">${icon(k.icon)}</div>`;
@@ -264,12 +302,18 @@ function render() {
   for (const key of ["auto_open", "autostart"]) document.getElementById(key).classList.toggle("on", !!s.settings[key]);
 
   document.getElementById("devices").innerHTML = s.devices.length ? s.devices.map(d => {
-    const active = Date.now() - d.last_seen < 3 * 60 * 1000;
-    const status = d.last_seen ? (active ? "Active now" : "Last seen " + ago(d.last_seen)) : "Paired";
+    const active = d.connected || Date.now() - d.last_seen < 3 * 60 * 1000;
+    const status = d.connected ? "Ready to receive" : d.last_seen ? (active ? "Active now" : "Last seen " + ago(d.last_seen)) : "Paired";
     return `<div class="device"><div class="ava">${icon("phone")}</div><div style="min-width:0">
       <div class="name">${esc(d.name)}</div><div class="meta"><span class="dot${active ? " on" : ""}"></span>${status}</div></div>
       <button class="forget" title="Forget this phone" onclick='send("forget",{name:${JSON.stringify(d.name)}})'>${icon("x")}</button></div>`;
   }).join("") : `<div class="row" style="color:var(--faint)">No phones yet</div>`;
+
+  const ready = s.devices.some(d => d.connected);
+  document.getElementById("composer").classList.toggle("off", !ready);
+  const hint = document.getElementById("hint");
+  hint.classList.toggle("show", s.devices.length > 0 && !ready);
+  hint.textContent = "Your phone isn't ready to receive. In Hey on your phone, turn on Receive from PC.";
 
   document.getElementById("filters").innerHTML = FILTERS.map(([key, label]) =>
     `<button class="filter${filter === key ? " on" : ""}" onclick="filter='${key}';render()">${label}</button>`).join("");
@@ -282,7 +326,7 @@ function render() {
       <br><button class="big-btn" onclick="send('pair')">${icon("plus")}Pair a phone</button></div>`;
   } else if (!s.items.length) {
     feed.innerHTML = `<div class="empty"><div class="art">${icon("send")}</div><h2>Nothing yet</h2>
-      On your phone, tap Share on anything and choose Hey. It'll show up here.</div>`;
+      On your phone, tap Share on anything and choose Hey. To send the other way, type above or drop files here.</div>`;
   } else if (!items.length) {
     feed.innerHTML = `<div class="empty"><h2>No matches</h2>Try a different search or filter.</div>`;
   } else {
@@ -325,7 +369,11 @@ function toast(text) {
   setTimeout(() => t.remove(), 1800);
 }
 
-window.hey = { update(s) { state = s; render(); }, toast };
+window.hey = {
+  update(s) { state = s; render(); },
+  toast,
+  drag(on) { document.getElementById("drop").classList.toggle("show", on); },
+};
 setInterval(() => { if (!state.pairing) render(); }, 30000); // keep "x min ago" fresh
 send("ready");
 </script>

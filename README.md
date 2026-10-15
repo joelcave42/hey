@@ -2,7 +2,7 @@
 
 <h1 align="center">Hey</h1>
 
-<p align="center"><b>Send links and text from your Android phone to your Windows PC. One tap, no account, no cloud.</b></p>
+<p align="center"><b>Send links, text, photos and files between your Android phone and your Windows PC. One tap, no account, no cloud.</b></p>
 
 Your friend sends you a Zoom link on your phone, and you need it on your PC.
 Normally that means messaging it to yourself on Discord. With Hey you tap
@@ -32,6 +32,13 @@ notification that opens the link.
   addresses get **Email**, phone numbers get **Copy number**.
 - **Auto-open links:** tick **Open links automatically** in the tray menu and
   links open in your browser the moment they arrive.
+- **PC → phone:** type or paste in the Hey window's send box, drop files on
+  the window, or right-click any file in Explorer → **Send to phone with Hey**
+  (on Windows 11 it's under **Show more options**). Links and text land on the
+  phone's clipboard with a notification; files go to `Download/Hey`.
+- **Always ready:** with **Receive from PC** on, the phone keeps a quiet
+  connection to your PC (with a small notification), reconnects on its own,
+  and starts again after a restart.
 - **The Hey window on your PC:** click the tray icon to see everything you've
   received, with photo thumbnails, search and filters, and Open / Copy / Show
   in folder on each item. Your phones and settings are in the sidebar, and
@@ -92,6 +99,8 @@ Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
 | Path | What's there |
 | --- | --- |
 | `windows/src/server.rs` | TLS listener, pairing and request handling |
+| `windows/src/push.rs` | PC → phone over the phone's always-open connection |
+| `windows/src/control.rs` | Lets Explorer's Send to phone reach the running Hey |
 | `windows/src/actions.rs` | Spots codes, links, addresses, emails and phone numbers |
 | `windows/src/files.rs` | Saves incoming files, thumbnails, photo to clipboard |
 | `windows/src/pairing.rs` | Pairing links and QR codes |
@@ -104,6 +113,7 @@ Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
 | `android/.../History.kt` | The Recent list, kept on the phone |
 | `android/.../HeyClient.kt` | Pinned TLS client and mDNS discovery |
 | `android/.../Send.kt` | Share target and clipboard sender |
+| `android/.../ReceiveService.kt` | Always ready to receive from the PC |
 | `android/.../SendService.kt` | Sends photos and files with a progress bar |
 | `android/.../HeyTileService.kt` | Quick settings tile |
 | `tools/fake_phone.py` | Tests the PC app without a phone |
@@ -121,10 +131,11 @@ Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
 - [x] Smart actions: sign-in codes, addresses, email addresses and phone numbers get the right button
 
 **v0.3: both directions**
-- [ ] PC → phone: **Send to phone** in Explorer's right-click menu, and from the tray
-- [ ] Clipboard sync
+- [x] PC → phone: send box, drag and drop, and **Send to phone** in Explorer's right-click menu
+- [x] Send your PC clipboard to the phone
+- [ ] Automatic clipboard sync
 - [ ] Screenshot a region and send it to the phone with one hotkey
-- [ ] Drag and drop onto the tray icon
+- [x] Drag and drop onto the Hey window
 - [ ] Pair without a QR code: tap your PC on the phone and confirm a matching code
 
 **v0.4: phone ↔ PC awareness**

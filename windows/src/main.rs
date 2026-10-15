@@ -7,10 +7,12 @@
 
 mod actions;
 mod config;
+mod control;
 mod feed;
 mod files;
 mod icon;
 mod pairing;
+mod push;
 mod server;
 mod url;
 mod window;
@@ -59,11 +61,21 @@ fn main() {
         run_action(&args[2]);
         return;
     }
+    // Explorer's "Send to phone": hand the files to the Hey that's running.
+    if args.len() >= 3 && args[1] == "--send" {
+        if !control::send(&args[2..]) {
+            winutil::notify_text(
+                "Hey isn't running",
+                "Start Hey on this PC, then try Send to phone again.",
+            );
+        }
+        return;
+    }
 
     let _instance = unsafe { CreateMutexW(None, true, w!(r"Local\HeyTraySingleInstance")) };
     if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
         // Hey is already running: bring its window up instead.
-        winutil::show_running_window();
+        control::show();
         return;
     }
 
@@ -71,6 +83,7 @@ fn main() {
     let _ = std::fs::write(&icon_path, icon::png(128));
     winutil::register_app_id(&icon_path);
     winutil::register_actions();
+    winutil::register_send_to_phone();
 
     let config = config::Config::load_or_create();
     let first_run = config.devices.is_empty();
@@ -78,6 +91,7 @@ fn main() {
     let shared = Arc::new(Shared {
         config: Mutex::new(config),
         pending_pair: Mutex::new(None),
+        phones: Mutex::new(HashMap::new()),
     });
 
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
@@ -100,6 +114,15 @@ fn main() {
         for event in events {
             let _ = forward.send_event(UserEvent::Server(event));
         }
+    });
+    // A second hey.exe can hand over files (Explorer's "Send to phone") or ask
+    // for the window; both arrive like messages from the page.
+    let forward = std::sync::Mutex::new(proxy.clone());
+    let _ = control::listen(move |message| {
+        let _ = forward
+            .lock()
+            .unwrap()
+            .send_event(UserEvent::Page(message.to_string()));
     });
     let forward = proxy.clone();
     MenuEvent::set_event_handler(Some(move |e| {
@@ -176,6 +199,27 @@ fn main() {
                 }
                 hey.update(&app.state());
             }
+            WinEvent::UserEvent(UserEvent::Page(message)) if message == r#"{"cmd":"show"}"# => {
+                hey.show()
+            }
+            WinEvent::UserEvent(UserEvent::Page(message)) if message.contains("\"dragEnter\"") => {
+                hey.dragging(true)
+            }
+            WinEvent::UserEvent(UserEvent::Page(message)) if message.contains("\"dragLeave\"") => {
+                hey.dragging(false)
+            }
+            WinEvent::UserEvent(UserEvent::Page(message)) if message.contains("\"pickFiles\"") => {
+                let picked = rfd::FileDialog::new()
+                    .set_title("Send files to your phone")
+                    .set_parent(&hey.window)
+                    .pick_files()
+                    .unwrap_or_default();
+                let files = picked.into_iter().map(push::Outgoing::File).collect();
+                if let Some(message) = app.send_to_phone(files) {
+                    hey.toast(&message);
+                }
+                hey.update(&app.state());
+            }
             WinEvent::UserEvent(UserEvent::Page(message))
                 if message.contains("\"chooseFolder\"") =>
             {
@@ -213,6 +257,47 @@ impl App {
         self.pairing = Some((link, expires));
     }
 
+    /// Sends text or files to the phone that's connected (the most recently
+    /// active one if there are several). Returns a message for the window.
+    fn send_to_phone(&mut self, what: Vec<push::Outgoing>) -> Option<String> {
+        if what.is_empty() {
+            return None;
+        }
+        let target = {
+            let phones = self.shared.phones.lock().unwrap();
+            let config = self.shared.config.lock().unwrap();
+            let mut connected: Vec<_> = config
+                .devices
+                .iter()
+                .filter(|d| phones.contains_key(&d.name))
+                .collect();
+            connected.sort_by_key(|d| std::cmp::Reverse(d.last_seen));
+            connected
+                .first()
+                .map(|d| (d.name.clone(), phones[&d.name].jobs.clone()))
+        };
+        let Some((device, jobs)) = target else {
+            return Some(
+                "Your phone isn't connected. Open Hey on it and turn on Ready to receive.".into(),
+            );
+        };
+        let count = what.len();
+        for item in what {
+            let id = match &item {
+                push::Outgoing::Text(text) => self.feed.add_outgoing_text(&device, text),
+                push::Outgoing::File(path) => self.feed.add_outgoing_file(&device, path),
+            };
+            if jobs.send(push::Job { id, what: item }).is_err() {
+                self.feed
+                    .set_delivered(id, Some("Your phone disconnected.".into()));
+            }
+        }
+        Some(match count {
+            1 => format!("Sending to {device}…"),
+            n => format!("Sending {n} items to {device}…"),
+        })
+    }
+
     fn set_save_folder(&mut self, folder: Option<String>) {
         let mut config = self.shared.config.lock().unwrap();
         config.save_folder = folder;
@@ -230,7 +315,13 @@ impl App {
         let mut devices: Vec<_> = config
             .devices
             .iter()
-            .map(|d| json!({"name": d.name, "last_seen": d.last_seen}))
+            .map(|d| {
+                json!({
+                    "name": d.name,
+                    "last_seen": d.last_seen,
+                    "connected": self.shared.phones.lock().unwrap().contains_key(&d.name),
+                })
+            })
             .collect();
         devices.sort_by_key(|d| std::cmp::Reverse(d["last_seen"].as_u64()));
         json!({
@@ -288,6 +379,10 @@ impl App {
                 Some(format!("Paired with {device}"))
             }
             Event::Seen => None,
+            Event::Delivered { id, error } => {
+                self.feed.set_delivered(id, error.clone());
+                error.map(|e| format!("Couldn't send to your phone: {e}"))
+            }
         }
     }
 
@@ -350,6 +445,36 @@ impl App {
             ("remove", Some(item)) => {
                 self.feed.remove(item.id);
                 None
+            }
+            ("drop", _) => {
+                let files: Vec<_> = request["paths"]
+                    .as_array()?
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(PathBuf::from)
+                    .filter(|p| p.is_file())
+                    .map(push::Outgoing::File)
+                    .collect();
+                if files.is_empty() {
+                    return Some("Drop files, not folders, to send them to your phone.".into());
+                }
+                self.send_to_phone(files)
+            }
+            ("sendText", _) => {
+                let text = request["text"].as_str()?.trim().to_string();
+                if text.is_empty() {
+                    return None;
+                }
+                self.send_to_phone(vec![push::Outgoing::Text(text)])
+            }
+            ("sendClipboard", _) => {
+                let text = arboard::Clipboard::new()
+                    .and_then(|mut c| c.get_text())
+                    .ok();
+                match text.map(|t| t.trim().to_string()).filter(|t| !t.is_empty()) {
+                    Some(text) => self.send_to_phone(vec![push::Outgoing::Text(text)]),
+                    None => Some("Your clipboard has no text to send.".into()),
+                }
             }
             ("resetFolder", _) => {
                 self.set_save_folder(None);
@@ -541,7 +666,9 @@ fn run_action(link: &str) {
         ("open", Some(p)) if inside_hey(&p) => winutil::open(&p.to_string_lossy()),
         ("reveal", Some(p)) if inside_hey(&p) => winutil::reveal(&p),
         ("folder", _) => winutil::open(&files::folder().to_string_lossy()),
-        ("show", _) => winutil::show_running_window(),
+        ("show", _) => {
+            control::show();
+        }
         _ => {}
     }
 }

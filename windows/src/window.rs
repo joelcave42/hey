@@ -7,7 +7,7 @@ use tao::dpi::LogicalSize;
 use tao::event_loop::EventLoopWindowTarget;
 use tao::window::{Icon, Theme, Window, WindowBuilder};
 use wry::http::{Request, Response};
-use wry::{WebContext, WebView, WebViewBuilder};
+use wry::{DragDropEvent, WebContext, WebView, WebViewBuilder};
 
 const PAGE: &str = include_str!("../ui/index.html");
 
@@ -30,6 +30,10 @@ impl HeyWindow {
         on_message: impl Fn(String) + 'static,
     ) -> Result<HeyWindow, Box<dyn std::error::Error>> {
         let dark = crate::winutil::prefers_dark();
+        // Dragging files onto the window arrives as page messages too, so the
+        // event loop handles everything in one place.
+        let on_message = std::rc::Rc::new(on_message);
+        let on_drag = on_message.clone();
         let window = WindowBuilder::new()
             .with_title("Hey")
             .with_inner_size(LogicalSize::new(1040.0, 720.0))
@@ -52,6 +56,18 @@ impl HeyWindow {
             .with_background_color(background)
             .with_devtools(cfg!(debug_assertions))
             .with_ipc_handler(move |request: Request<String>| on_message(request.into_body()))
+            .with_drag_drop_handler(move |event| {
+                let message = match event {
+                    DragDropEvent::Enter { .. } => serde_json::json!({"cmd": "dragEnter"}),
+                    DragDropEvent::Leave => serde_json::json!({"cmd": "dragLeave"}),
+                    DragDropEvent::Drop { paths, .. } => {
+                        serde_json::json!({"cmd": "drop", "paths": paths})
+                    }
+                    _ => return true,
+                };
+                on_drag(message.to_string());
+                true
+            })
             .build(&window)?;
 
         Ok(HeyWindow {
@@ -72,6 +88,13 @@ impl HeyWindow {
         let _ = self
             .webview
             .evaluate_script(&format!("window.hey && hey.update({state})"));
+    }
+
+    /// Shows or hides the "Drop to send to your phone" overlay.
+    pub fn dragging(&self, on: bool) {
+        let _ = self
+            .webview
+            .evaluate_script(&format!("window.hey && hey.drag({on})"));
     }
 
     pub fn toast(&self, text: &str) {

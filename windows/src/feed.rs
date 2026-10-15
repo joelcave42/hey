@@ -30,6 +30,14 @@ pub struct Item {
     pub size: Option<u64>,
     #[serde(default)]
     pub thumb: bool,
+    /// Sent from this PC to the phone, rather than received.
+    #[serde(default)]
+    pub outgoing: bool,
+    /// For things sent to the phone: sending, sent or failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Default)]
@@ -117,6 +125,36 @@ impl Feed {
             self.save();
         }
         id
+    }
+
+    /// Records something on its way to a phone.
+    pub fn add_outgoing_text(&mut self, device: &str, text: &str) -> u64 {
+        let found = crate::actions::find(text);
+        let id = self.add_text(device, text, &found);
+        self.mark_outgoing(id);
+        id
+    }
+
+    pub fn add_outgoing_file(&mut self, device: &str, file: &Path) -> u64 {
+        let id = self.add_file(device, file);
+        self.mark_outgoing(id);
+        id
+    }
+
+    fn mark_outgoing(&mut self, id: u64) {
+        if let Some(item) = self.items.iter_mut().find(|i| i.id == id) {
+            item.outgoing = true;
+            item.status = Some("sending".into());
+        }
+        self.save();
+    }
+
+    pub fn set_delivered(&mut self, id: u64, error: Option<String>) {
+        if let Some(item) = self.items.iter_mut().find(|i| i.id == id) {
+            item.status = Some(if error.is_some() { "failed" } else { "sent" }.into());
+            item.error = error;
+        }
+        self.save();
     }
 
     fn push(&mut self, mut item: Item) -> u64 {

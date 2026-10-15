@@ -7,6 +7,7 @@
 //!   {"t":"file","token":"...","name":"IMG_1.jpg","size":N,"index":0,"count":1}
 //!       followed by exactly N bytes                    -> {"ok":true}
 //!   {"t":"ping","token":"..."}                         -> {"ok":true,"name":"PC"}
+//!   {"t":"listen","token":"..."}  keeps the connection open for PC → phone (see push.rs)
 
 use crate::config::{self, Config, Device};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
@@ -32,8 +33,14 @@ pub enum Event {
     Paired {
         device: String,
     },
-    /// A paired phone checked in (it opened Hey), so its status can update.
+    /// A paired phone checked in, connected or disconnected, so its status
+    /// in the window should update.
     Seen,
+    /// Something sent to a phone arrived (`error` is None) or didn't.
+    Delivered {
+        id: u64,
+        error: Option<String>,
+    },
     /// A file finished arriving. `index` and `count` say where it sits in a
     /// batch the phone sent together, so the PC can show one notification.
     File {
@@ -48,6 +55,8 @@ pub struct Shared {
     pub config: Mutex<Config>,
     /// The one-time key shown in the current pairing QR code, if any.
     pub pending_pair: Mutex<Option<(String, Instant)>>,
+    /// Phones connected right now, ready to receive, by name.
+    pub phones: Mutex<std::collections::HashMap<String, crate::push::Phone>>,
 }
 
 pub fn start(shared: Arc<Shared>, events: Sender<Event>) -> std::io::Result<u16> {
@@ -93,6 +102,14 @@ fn handle(
     let mut line = String::new();
     reader.by_ref().take(MAX_REQUEST).read_line(&mut line)?;
     let request: Value = serde_json::from_str(&line)?;
+    if request.get("t").and_then(Value::as_str) == Some("listen") {
+        let Some(device) = device_for(&request, shared) else {
+            let stream = reader.into_inner();
+            stream.write_all(format!("{}\n", not_paired()).as_bytes())?;
+            return Ok(stream.flush()?);
+        };
+        return Ok(crate::push::serve(&mut reader, device, shared, events)?);
+    }
     let reply = if request.get("t").and_then(Value::as_str) == Some("file") {
         receive_file(&request, &mut reader, shared, events)
     } else {

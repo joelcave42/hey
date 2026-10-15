@@ -54,20 +54,6 @@ pub fn prefers_dark() -> bool {
     ok && value == 0
 }
 
-/// Brings an already-running Hey's window to the front.
-pub fn show_running_window() {
-    use windows::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, SW_RESTORE, SW_SHOW, SetForegroundWindow, ShowWindow,
-    };
-    unsafe {
-        if let Ok(hwnd) = FindWindowW(None, w!("Hey")) {
-            let _ = ShowWindow(hwnd, SW_SHOW);
-            let _ = ShowWindow(hwnd, SW_RESTORE);
-            let _ = SetForegroundWindow(hwnd);
-        }
-    }
-}
-
 pub fn starts_with_windows() -> bool {
     let mut size = 0u32;
     unsafe {
@@ -204,6 +190,22 @@ pub fn register_actions() {
         &format!(r"{key}\shell\open\command"),
         "",
         &format!("\"{}\" --action \"%1\"", exe.display()),
+    );
+}
+
+/// Adds "Send to phone with Hey" to File Explorer's right-click menu for
+/// files. (On Windows 11 it's under "Show more options".)
+pub fn register_send_to_phone() {
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let key = r"Software\Classes\*\shell\HeySendToPhone";
+    set_string(key, "", "Send to phone with Hey");
+    set_string(key, "Icon", &format!("\"{}\",0", exe.display()));
+    set_string(
+        &format!(r"{key}\command"),
+        "",
+        &format!("\"{}\" --send \"%1\"", exe.display()),
     );
 }
 
