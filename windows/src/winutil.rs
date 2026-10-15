@@ -5,8 +5,8 @@ use windows::Data::Xml::Dom::XmlDocument;
 use windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
 use windows::Win32::Foundation::ERROR_SUCCESS;
 use windows::Win32::System::Registry::{
-    HKEY, HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ, RegCloseKey, RegCreateKeyW, RegDeleteKeyValueW,
-    RegGetValueW, RegSetValueExW,
+    HKEY, HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_DWORD, RRF_RT_REG_SZ, RegCloseKey, RegCreateKeyW,
+    RegDeleteKeyValueW, RegGetValueW, RegSetValueExW,
 };
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
@@ -33,6 +33,38 @@ fn set_string(key: &str, name: &str, value: &str) {
         let bytes = std::slice::from_raw_parts(wide.as_ptr() as *const u8, wide.len() * 2);
         let _ = RegSetValueExW(hkey, &HSTRING::from(name), None, REG_SZ, Some(bytes));
         let _ = RegCloseKey(hkey);
+    }
+}
+
+/// Whether Windows is set to dark mode for apps.
+pub fn prefers_dark() -> bool {
+    let mut value = 1u32;
+    let mut size = 4u32;
+    let ok = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            w!(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"),
+            w!("AppsUseLightTheme"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some(&mut value as *mut u32 as *mut _),
+            Some(&mut size),
+        ) == ERROR_SUCCESS
+    };
+    ok && value == 0
+}
+
+/// Brings an already-running Hey's window to the front.
+pub fn show_running_window() {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        FindWindowW, SW_RESTORE, SW_SHOW, SetForegroundWindow, ShowWindow,
+    };
+    unsafe {
+        if let Ok(hwnd) = FindWindowW(None, w!("Hey")) {
+            let _ = ShowWindow(hwnd, SW_SHOW);
+            let _ = ShowWindow(hwnd, SW_RESTORE);
+            let _ = SetForegroundWindow(hwnd);
+        }
     }
 }
 

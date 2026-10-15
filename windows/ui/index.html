@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hey</title>
+<style>
+:root {
+  --bg: #f5f5fa; --side: #ececf3; --card: #ffffff; --card-2: #f4f4f9; --line: #e3e3ec;
+  --text: #14151a; --muted: #5d6070; --faint: #8b8d9b;
+  --brand: #5b5bf6; --brand-2: #3b82f6; --good: #22b866; --warn: #e5a50a; --bad: #e5484d;
+  --c-link: #6d5dfc; --c-photo: #e8507f; --c-file: #1fa99d; --c-text: #d9921c; --c-code: #22b866;
+  --shadow: 0 1px 2px rgba(20,20,40,.06), 0 4px 16px rgba(20,20,40,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1015; --side: #14151c; --card: #191a22; --card-2: #20212c; --line: #262735;
+    --text: #f2f2f6; --muted: #9a9cab; --faint: #6c6e7d;
+    --brand: #8b7dff; --good: #3ddc84; --warn: #ffc145; --bad: #ff5c5c;
+    --c-link: #8b7dff; --c-photo: #ff6b9a; --c-file: #2ec4b6; --c-text: #ffb547; --c-code: #3ddc84;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  background: var(--bg); color: var(--text);
+  display: grid; grid-template-columns: 272px 1fr; overflow: hidden;
+  user-select: none; -webkit-user-select: none;
+}
+button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
+svg.i { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* Sidebar */
+aside { background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 22px 16px 16px; overflow-y: auto; }
+.brand { display: flex; align-items: center; gap: 12px; padding: 0 6px 22px; }
+.brand img { width: 36px; height: 36px; border-radius: 10px; }
+.brand b { font: 700 24px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: -.3px; }
+.label { font-size: 12px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .6px; padding: 0 8px 8px; }
+.devices { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.device { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; background: var(--card); box-shadow: var(--shadow); position: relative; }
+.device .ava { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #6d5dfc, #3b82f6); }
+.device .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.device .meta { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.dot.on { background: var(--good); box-shadow: 0 0 0 0 var(--good); animation: pulse 2s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 60%, transparent); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.device .forget { position: absolute; right: 8px; top: 8px; opacity: 0; color: var(--faint); padding: 4px; border-radius: 8px; }
+.device:hover .forget { opacity: 1; }
+.device .forget:hover { color: var(--bad); background: var(--card-2); }
+.pair-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 11px; border-radius: 12px; border: 1.5px dashed var(--line); color: var(--muted); font-weight: 600; }
+.pair-btn:hover { border-color: var(--brand); color: var(--brand); }
+.settings { margin-top: 26px; display: flex; flex-direction: column; gap: 2px; }
+.row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; border-radius: 10px; }
+.row .t { flex: 1; min-width: 0; }
+.row .t small { display: block; color: var(--faint); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.switch { width: 38px; height: 22px; border-radius: 11px; background: var(--line); position: relative; transition: background .2s; flex: none; }
+.switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.switch.on { background: var(--brand); }
+.switch.on::after { transform: translateX(16px); }
+.chip-btn { padding: 6px 12px; border-radius: 9px; background: var(--card); box-shadow: var(--shadow); font-weight: 600; font-size: 13px; }
+.chip-btn:hover { background: var(--card-2); }
+.foot { margin-top: auto; padding: 16px 8px 0; font-size: 12px; color: var(--faint); display: flex; justify-content: space-between; }
+.foot a { color: var(--faint); cursor: pointer; text-decoration: none; }
+.foot a:hover { color: var(--brand); }
+
+/* Feed */
+main { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+header { display: flex; align-items: center; gap: 14px; padding: 22px 28px 14px; }
+header h1 { font: 700 26px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif; margin: 0; flex: 1; letter-spacing: -.3px; }
+.search { display: flex; align-items: center; gap: 8px; background: var(--card); box-shadow: var(--shadow); border: 1px solid var(--line); border-radius: 12px; padding: 0 12px; width: 260px; color: var(--faint); }
+.search input { border: 0; outline: 0; background: none; color: var(--text); font: inherit; padding: 9px 0; width: 100%; user-select: text; }
+.filters { display: flex; gap: 8px; padding: 0 28px 14px; }
+.filter { padding: 6px 14px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); color: var(--muted); font-weight: 600; font-size: 13px; }
+.filter.on { background: var(--text); color: var(--bg); }
+.feed { flex: 1; overflow-y: auto; padding: 4px 28px 28px; display: flex; flex-direction: column; gap: 10px; }
+.day { font-size: 12px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .6px; padding: 12px 4px 2px; }
+.item { display: flex; gap: 16px; padding: 14px; border-radius: 18px; background: var(--card); box-shadow: var(--shadow); position: relative; animation: rise .25s ease-out; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.item .thumb { width: 92px; height: 92px; border-radius: 12px; object-fit: cover; background: var(--card-2); flex: none; cursor: pointer; }
+.item .ico { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; flex: none; }
+.item .ico svg { width: 22px; height: 22px; }
+.item .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.item .title { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: text; }
+.item .text { color: var(--muted); white-space: pre-wrap; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; user-select: text; }
+.item .code { font: 700 30px/1.1 "Cascadia Mono", Consolas, monospace; letter-spacing: 4px; color: var(--c-code); user-select: text; }
+.item .sub { font-size: 12.5px; color: var(--faint); }
+.item .actions { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.act { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 9px; background: var(--card-2); font-weight: 600; font-size: 13px; }
+.act svg { width: 15px; height: 15px; }
+.act:hover { background: color-mix(in srgb, var(--brand) 16%, var(--card-2)); color: var(--brand); }
+.act.primary { background: var(--brand); color: #fff; }
+.act.primary:hover { filter: brightness(1.08); color: #fff; }
+.item .remove { position: absolute; top: 10px; right: 10px; opacity: 0; color: var(--faint); padding: 5px; border-radius: 8px; }
+.item:hover .remove { opacity: 1; }
+.item .remove:hover { background: var(--card-2); color: var(--bad); }
+
+.empty { margin: auto; text-align: center; max-width: 360px; color: var(--muted); padding: 40px 0; }
+.empty .art { width: 96px; height: 96px; border-radius: 28px; margin: 0 auto 18px; display: grid; place-items: center; background: linear-gradient(135deg, #6d5dfc, #3b82f6); color: #fff; box-shadow: 0 12px 40px color-mix(in srgb, #6d5dfc 40%, transparent); }
+.empty .art svg { width: 44px; height: 44px; }
+.empty h2 { color: var(--text); margin: 0 0 6px; font-size: 20px; }
+.big-btn { margin-top: 18px; padding: 12px 22px; border-radius: 14px; color: #fff; font-weight: 600; font-size: 15px; background: linear-gradient(135deg, #6d5dfc, #3b82f6); display: inline-flex; gap: 10px; align-items: center; }
+.big-btn:hover { filter: brightness(1.08); }
+
+/* Pairing */
+.overlay { position: fixed; inset: 0; background: rgba(8,8,14,.55); display: grid; place-items: center; animation: fade .2s; z-index: 5; }
+@keyframes fade { from { opacity: 0; } }
+.modal { background: var(--card); border-radius: 24px; padding: 28px; width: 420px; text-align: center; box-shadow: 0 20px 80px rgba(0,0,0,.35); animation: rise .25s ease-out; }
+.modal h2 { margin: 0 0 4px; font-size: 22px; }
+.modal p { color: var(--muted); margin: 0 0 18px; }
+.qr { background: #fff; border-radius: 16px; padding: 10px; display: inline-block; line-height: 0; }
+.qr svg { width: 260px; height: 260px; }
+.steps { text-align: left; color: var(--muted); margin: 18px 0 0; padding-left: 20px; }
+.steps li { margin: 4px 0; }
+.steps b { color: var(--text); }
+.modal .row2 { display: flex; gap: 8px; justify-content: center; margin-top: 18px; }
+.timer { font-size: 12.5px; color: var(--faint); margin-top: 10px; }
+
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 18px; border-radius: 12px; font-weight: 600; box-shadow: 0 8px 30px rgba(0,0,0,.25); animation: rise .2s; z-index: 9; }
+::-webkit-scrollbar { width: 10px; } ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 10px; border: 3px solid var(--bg); }
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand"><img src="/icon.png" alt=""><b>Hey</b></div>
+  <div class="label">Phones</div>
+  <div class="devices" id="devices"></div>
+  <button class="pair-btn" onclick="send('pair')"><svg class="i"><use href="#plus"/></svg>Pair a phone</button>
+  <div class="settings">
+    <div class="label">Settings</div>
+    <div class="row"><div class="t">Open links automatically<small>Links open as they arrive</small></div><button class="switch" id="auto_open" onclick="toggle('auto_open')" aria-label="Open links automatically"></button></div>
+    <div class="row"><div class="t">Start with Windows<small>Hey waits in the tray</small></div><button class="switch" id="autostart" onclick="toggle('autostart')" aria-label="Start with Windows"></button></div>
+    <div class="row"><div class="t">Received files<small id="folderPath"></small></div><button class="chip-btn" onclick="send('openFolder')">Open</button></div>
+  </div>
+  <div class="foot"><span id="version"></span><a onclick="send('openUrl',{url:'https://github.com/joelcave42/hey'})">GitHub</a></div>
+</aside>
+<main>
+  <header>
+    <h1>Received</h1>
+    <button class="chip-btn" id="clear" onclick="if(confirm('Clear the list? Received files stay in Downloads\\Hey.'))send('clear')">Clear</button>
+    <label class="search"><svg class="i"><use href="#search"/></svg><input id="q" placeholder="Search" oninput="render()"></label>
+  </header>
+  <div class="filters" id="filters"></div>
+  <div class="feed" id="feed"></div>
+</main>
+<div id="layer"></div>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></symbol>
+  <symbol id="link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
+  <symbol id="key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3M16 7l3 3M14 9l2 2"/></symbol>
+  <symbol id="image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L6 21"/></symbol>
+  <symbol id="film" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4"/></symbol>
+  <symbol id="music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+  <symbol id="file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="text" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></symbol>
+  <symbol id="copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+  <symbol id="open" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="map" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+  <symbol id="send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></symbol>
+</svg>
+
+<script>
+let state = { devices: [], items: [], settings: {}, pairing: null };
+let filter = "all";
+const KINDS = {
+  link:  { icon: "link",  color: "var(--c-link)",  word: "Link" },
+  code:  { icon: "key",   color: "var(--c-code)",  word: "Code" },
+  text:  { icon: "text",  color: "var(--c-text)",  word: "Text" },
+  photo: { icon: "image", color: "var(--c-photo)", word: "Photo" },
+  video: { icon: "film",  color: "var(--c-photo)", word: "Video" },
+  audio: { icon: "music", color: "var(--c-file)",  word: "Audio" },
+  pdf:   { icon: "file",  color: "var(--c-file)",  word: "PDF" },
+  file:  { icon: "file",  color: "var(--c-file)",  word: "File" },
+};
+const FILTERS = [["all", "All"], ["link", "Links"], ["photo", "Photos"], ["file", "Files"], ["text", "Text"]];
+
+function send(cmd, extra) { window.ipc.postMessage(JSON.stringify({ cmd, ...extra })); }
+function toggle(key) { send("set", { key, value: !state.settings[key] }); }
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function icon(name) { return `<svg class="i"><use href="#${name}"/></svg>`; }
+
+function ago(ms) {
+  const s = Math.max(0, (Date.now() - ms) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  const d = new Date(ms);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + ", " + d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+function size(b) {
+  if (b == null) return "";
+  if (b >= 1 << 30) return (b / (1 << 30)).toFixed(1) + " GB";
+  if (b >= 1 << 20) return (b / (1 << 20)).toFixed(1) + " MB";
+  if (b >= 1 << 10) return Math.round(b / 1024) + " KB";
+  return b + " bytes";
+}
+function dayLabel(ms) {
+  const d = new Date(ms), t = new Date();
+  const y = new Date(); y.setDate(t.getDate() - 1);
+  if (d.toDateString() === t.toDateString()) return "Today";
+  if (d.toDateString() === y.toDateString()) return "Yesterday";
+  return d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+}
+function prettyLink(l) { return l.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, ""); }
+
+function matches(item) {
+  if (filter === "photo" && !["photo", "video"].includes(item.kind)) return false;
+  if (filter === "file" && !["file", "pdf", "audio"].includes(item.kind)) return false;
+  if (filter === "text" && !["text", "code"].includes(item.kind)) return false;
+  if (filter === "link" && item.kind !== "link") return false;
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  if (!q) return true;
+  return [item.text, item.name, item.link, item.code, item.device].some(v => v && v.toLowerCase().includes(q));
+}
+
+function itemHtml(it) {
+  const k = KINDS[it.kind] || KINDS.file;
+  const meta = `${esc(it.device)} · ${ago(it.time)}`;
+  const lead = it.thumb
+    ? `<img class="thumb" src="/thumb/${it.id}" alt="" onclick="send('open',{id:${it.id}})">`
+    : `<div class="ico" style="background:color-mix(in srgb, ${k.color} 16%, transparent);color:${k.color}">${icon(k.icon)}</div>`;
+  let title = "", body = "", acts = "";
+  const btn = (cmd, label, ic, primary) => `<button class="act${primary ? " primary" : ""}" onclick="send('${cmd}',{id:${it.id}})">${icon(ic)}${label}</button>`;
+  if (it.kind === "code") {
+    body = `<div class="code">${esc(it.code)}</div>`;
+    if (it.text && it.text.trim() !== it.code) body += `<div class="text">${esc(it.text)}</div>`;
+    acts = btn("copyCode", "Copy code", "copy", true) + btn("copy", "Copy message", "text");
+  } else if (it.kind === "link") {
+    title = `<div class="title">${esc(prettyLink(it.link))}</div>`;
+    if (it.text && it.text.trim() !== it.link) body = `<div class="text">${esc(it.text)}</div>`;
+    acts = btn("open", "Open link", "open", true) + btn("copy", "Copy", "copy");
+  } else if (it.kind === "text") {
+    body = `<div class="text" style="color:var(--text)">${esc(it.text)}</div>`;
+    acts = btn("copy", "Copy", "copy", true);
+  } else {
+    title = `<div class="title">${esc(it.name)}</div>`;
+    body = `<div class="sub">${k.word} · ${size(it.size)}</div>`;
+    acts = btn("open", "Open", "open", true) + (it.kind === "photo" ? btn("copy", "Copy", "copy") : "") + btn("reveal", "Show in folder", "folder");
+  }
+  return `<div class="item">${lead}<div class="body">${title}${body}<div class="sub">${meta}</div><div class="actions">${acts}</div></div>
+    <button class="remove" title="Remove from list" onclick="send('remove',{id:${it.id}})">${icon("x")}</button></div>`;
+}
+
+function render() {
+  const s = state;
+  document.getElementById("version").textContent = "Hey " + (s.version || "");
+  document.getElementById("folderPath").textContent = s.settings.folder || "";
+  document.getElementById("clear").style.display = s.items.length ? "" : "none";
+  for (const key of ["auto_open", "autostart"]) document.getElementById(key).classList.toggle("on", !!s.settings[key]);
+
+  document.getElementById("devices").innerHTML = s.devices.length ? s.devices.map(d => {
+    const active = Date.now() - d.last_seen < 3 * 60 * 1000;
+    const status = d.last_seen ? (active ? "Active now" : "Last seen " + ago(d.last_seen)) : "Paired";
+    return `<div class="device"><div class="ava">${icon("phone")}</div><div style="min-width:0">
+      <div class="name">${esc(d.name)}</div><div class="meta"><span class="dot${active ? " on" : ""}"></span>${status}</div></div>
+      <button class="forget" title="Forget this phone" onclick='send("forget",{name:${JSON.stringify(d.name)}})'>${icon("x")}</button></div>`;
+  }).join("") : `<div class="row" style="color:var(--faint)">No phones yet</div>`;
+
+  document.getElementById("filters").innerHTML = FILTERS.map(([key, label]) =>
+    `<button class="filter${filter === key ? " on" : ""}" onclick="filter='${key}';render()">${label}</button>`).join("");
+
+  const feed = document.getElementById("feed");
+  const items = s.items.filter(matches);
+  if (!s.devices.length) {
+    feed.innerHTML = `<div class="empty"><div class="art">${icon("phone")}</div><h2>Pair your phone</h2>
+      Then share links, photos and files to Hey on your phone and they show up here.
+      <br><button class="big-btn" onclick="send('pair')">${icon("plus")}Pair a phone</button></div>`;
+  } else if (!s.items.length) {
+    feed.innerHTML = `<div class="empty"><div class="art">${icon("send")}</div><h2>Nothing yet</h2>
+      On your phone, tap Share on anything and choose Hey. It'll show up here.</div>`;
+  } else if (!items.length) {
+    feed.innerHTML = `<div class="empty"><h2>No matches</h2>Try a different search or filter.</div>`;
+  } else {
+    let html = "", last = "";
+    for (const it of items) {
+      const day = dayLabel(it.time);
+      if (day !== last) { html += `<div class="day">${day}</div>`; last = day; }
+      html += itemHtml(it);
+    }
+    feed.innerHTML = html;
+  }
+  renderPairing();
+}
+
+let timer;
+function renderPairing() {
+  const layer = document.getElementById("layer");
+  const p = state.pairing;
+  clearInterval(timer);
+  if (!p) { layer.innerHTML = ""; return; }
+  layer.innerHTML = `<div class="overlay" onclick="if(event.target===this)send('cancelPair')"><div class="modal">
+    <h2>Pair a phone</h2><p>with <b>${esc(state.pc)}</b></p>
+    <div class="qr">${p.qr}</div>
+    <ol class="steps"><li>Open <b>Hey</b> on your Android phone.</li><li>Tap <b>Scan pairing code</b> and point it here.</li></ol>
+    <div class="timer" id="timer"></div>
+    <div class="row2"><button class="act" onclick="send('copyPairLink')">${icon("copy")}Copy link instead</button><button class="act" onclick="send('cancelPair')">Cancel</button></div>
+  </div></div>`;
+  const tick = () => {
+    const left = Math.max(0, Math.round((p.expires - Date.now()) / 1000));
+    const el = document.getElementById("timer");
+    if (el) el.textContent = left ? `This code works once and expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "This code has expired. Close and try again.";
+  };
+  tick(); timer = setInterval(tick, 1000);
+}
+
+function toast(text) {
+  const t = document.createElement("div");
+  t.className = "toast"; t.textContent = text;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 1800);
+}
+
+window.hey = { update(s) { state = s; render(); }, toast };
+setInterval(() => { if (!state.pairing) render(); }, 30000); // keep "x min ago" fresh
+send("ready");
+</script>
+</body>
+</html>

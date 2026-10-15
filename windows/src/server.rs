@@ -32,6 +32,8 @@ pub enum Event {
     Paired {
         device: String,
     },
+    /// A paired phone checked in (it opened Hey), so its status can update.
+    Seen,
     /// A file finished arriving. `index` and `count` say where it sits in a
     /// batch the phone sent together, so the PC can show one notification.
     File {
@@ -105,14 +107,16 @@ fn handle(
     Ok(())
 }
 
+/// The paired phone a request comes from, noting that it was just seen.
 fn device_for(request: &Value, shared: &Shared) -> Option<String> {
     let token = request.get("token").and_then(Value::as_str).unwrap_or("");
-    shared
-        .config
-        .lock()
-        .unwrap()
-        .device_for_token(token)
-        .map(|d| d.name.clone())
+    let hash = config::hash(token);
+    let mut config = shared.config.lock().unwrap();
+    let device = config.devices.iter_mut().find(|d| d.token_hash == hash)?;
+    device.last_seen = crate::feed::now_ms();
+    let name = device.name.clone();
+    config.save();
+    Some(name)
 }
 
 fn not_paired() -> Value {
@@ -168,6 +172,7 @@ fn respond(request: &Value, shared: &Shared, events: &Sender<Event>) -> Value {
             config.devices.push(Device {
                 name: device.clone(),
                 token_hash: config::hash(&token),
+                last_seen: crate::feed::now_ms(),
             });
             config.save();
             let _ = events.send(Event::Paired { device });
@@ -183,6 +188,8 @@ fn respond(request: &Value, shared: &Shared, events: &Sender<Event>) -> Value {
                     return json!({"ok": false, "error": "Nothing to send."});
                 }
                 let _ = events.send(Event::Received { device, text });
+            } else {
+                let _ = events.send(Event::Seen);
             }
             json!({"ok": true, "name": name})
         }

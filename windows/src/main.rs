@@ -1,39 +1,55 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-//! Hey for Windows: lives in the system tray and receives links, text,
-//! photos and files from paired Android phones. Text and single photos are
-//! copied to the clipboard; everything is shown in a notification.
+//! Hey for Windows: receives links, text, photos and files from paired
+//! Android phones. It lives in the tray; clicking the icon opens the Hey
+//! window with everything received. Text and single photos are copied to the
+//! clipboard and everything gets a notification.
 
 mod actions;
 mod config;
+mod feed;
 mod files;
 mod icon;
 mod pairing;
 mod server;
 mod url;
+mod window;
 mod winutil;
 
+use feed::Feed;
+use serde_json::{Value, json};
 use server::{Event, Shared};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
-use tray_icon::{Icon, TrayIconBuilder};
+use std::sync::{Arc, Mutex, mpsc};
+use std::time::Instant;
+use tao::event::{Event as WinEvent, WindowEvent};
+use tao::event_loop::{ControlFlow, EventLoopBuilder};
+use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError};
 use windows::Win32::System::Threading::CreateMutexW;
-use windows::Win32::UI::WindowsAndMessaging::{
-    DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, TranslateMessage,
-};
 use windows::core::w;
 use winutil::Toast;
 
-const RECENT_LIMIT: usize = 8;
+const PAIRING_MINUTES: u64 = 10;
 
-enum Recent {
-    Text(String),
-    File(PathBuf),
+/// Everything that wakes the event loop up.
+enum UserEvent {
+    Server(Event),
+    Menu(MenuEvent),
+    Tray(TrayIconEvent),
+    Page(String),
+}
+
+struct App {
+    shared: Arc<Shared>,
+    feed: Feed,
+    port: u16,
+    /// The pairing link on screen, and when it expires (ms since 1970).
+    pairing: Option<(String, u64)>,
+    /// Files from a batch a phone is still sending: (path, feed id).
+    batches: HashMap<String, Vec<(PathBuf, u64)>>,
 }
 
 fn main() {
@@ -46,6 +62,8 @@ fn main() {
 
     let _instance = unsafe { CreateMutexW(None, true, w!(r"Local\HeyTraySingleInstance")) };
     if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+        // Hey is already running: bring its window up instead.
+        winutil::show_running_window();
         return;
     }
 
@@ -62,6 +80,9 @@ fn main() {
         pending_pair: Mutex::new(None),
     });
 
+    let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
+    let proxy = event_loop.create_proxy();
+
     let (events_tx, events) = mpsc::channel();
     let port = match server::start(shared.clone(), events_tx) {
         Ok(port) => port,
@@ -74,186 +95,277 @@ fn main() {
         }
     };
     let _mdns = server::advertise(&pc_id, port);
+    let forward = proxy.clone();
+    std::thread::spawn(move || {
+        for event in events {
+            let _ = forward.send_event(UserEvent::Server(event));
+        }
+    });
+    let forward = proxy.clone();
+    MenuEvent::set_event_handler(Some(move |e| {
+        let _ = forward.send_event(UserEvent::Menu(e));
+    }));
+    let forward = proxy.clone();
+    TrayIconEvent::set_event_handler(Some(move |e| {
+        let _ = forward.send_event(UserEvent::Tray(e));
+    }));
 
-    // Tray menu
     let menu = Menu::new();
-    let header = MenuItem::new(format!("Hey · {}", config::pc_name()), false, None);
+    let open = MenuItem::new("Open Hey", true, None);
     let pair = MenuItem::new("Pair a phone…", true, None);
-    let recent = Submenu::new("Recent", true);
-    let open_folder = MenuItem::new("Open Hey folder", true, None);
-    let empty = MenuItem::new("Nothing yet", false, None);
-    let phones = MenuItem::new(phone_count(&shared), false, None);
-    let forget = MenuItem::new("Forget all phones", true, None);
-    let autostart = CheckMenuItem::new(
-        "Start with Windows",
-        true,
-        winutil::starts_with_windows(),
-        None,
-    );
-    let auto_open = CheckMenuItem::new(
-        "Open links automatically",
-        true,
-        shared.config.lock().unwrap().auto_open_links,
-        None,
-    );
     let quit = MenuItem::new("Quit Hey", true, None);
-    let _ = recent.append(&empty);
-    let _ = menu.append_items(&[
-        &header,
-        &PredefinedMenuItem::separator(),
-        &pair,
-        &recent,
-        &open_folder,
-        &PredefinedMenuItem::separator(),
-        &phones,
-        &forget,
-        &auto_open,
-        &autostart,
-        &PredefinedMenuItem::separator(),
-        &quit,
-    ]);
+    let _ = menu.append_items(&[&open, &pair, &PredefinedMenuItem::separator(), &quit]);
+    let mut tray = Some(
+        TrayIconBuilder::new()
+            .with_menu(Box::new(menu))
+            .with_menu_on_left_click(false)
+            .with_tooltip("Hey")
+            .with_icon(Icon::from_rgba(icon::rgba(32), 32, 32).expect("tray icon"))
+            .build()
+            .expect("could not create the tray icon"),
+    );
 
-    let _tray = TrayIconBuilder::new()
-        .with_menu(Box::new(menu))
-        .with_menu_on_left_click(true)
-        .with_tooltip("Hey: share from your phone to this PC")
-        .with_icon(Icon::from_rgba(icon::rgba(32), 32, 32).expect("tray icon"))
-        .build()
-        .expect("could not create the tray icon");
+    let forward = proxy.clone();
+    let hey = window::HeyWindow::new(&event_loop, first_run, move |message| {
+        let _ = forward.send_event(UserEvent::Page(message));
+    })
+    .expect("could not create the Hey window");
 
-    let pairing_page = Arc::new(Mutex::new(String::new()));
-    let pairing_url = pairing::serve(pairing_page.clone()).ok();
-    let open_pairing = || {
-        let key = config::random_token(18);
-        *shared.pending_pair.lock().unwrap() = Some((key.clone(), Instant::now()));
-        let config = shared.config.lock().unwrap();
-        *pairing_page.lock().unwrap() = pairing::page(&pairing::link(&config, port, &key));
-        if let Some(url) = &pairing_url {
-            winutil::open(url);
-        }
+    let mut app = App {
+        shared,
+        feed: Feed::load(),
+        port,
+        pairing: None,
+        batches: HashMap::new(),
     };
-
     if first_run {
-        open_pairing();
+        app.start_pairing();
     }
 
-    let mut recent_items: Vec<(MenuItem, Recent)> = Vec::new();
-    // Files from a batch the phone is still sending, per device.
-    let mut batches: HashMap<String, Vec<PathBuf>> = HashMap::new();
-    loop {
-        unsafe {
-            let mut msg = MSG::default();
-            while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
-                let _ = TranslateMessage(&msg);
-                DispatchMessageW(&msg);
+    event_loop.run(move |event, _, flow| {
+        *flow = ControlFlow::Wait;
+        match event {
+            WinEvent::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                // Closing the window keeps Hey running in the tray.
+                hey.window.set_visible(false);
+                app.cancel_pairing();
             }
-        }
-
-        while let Ok(event) = MenuEvent::receiver().try_recv() {
-            let id = event.id;
-            if id == *pair.id() {
-                open_pairing();
-            } else if id == *open_folder.id() {
-                winutil::open(&files::folder().to_string_lossy());
-            } else if id == *forget.id() {
-                let mut config = shared.config.lock().unwrap();
-                config.devices.clear();
-                config.save();
-                drop(config);
-                phones.set_text(phone_count(&shared));
-            } else if id == *auto_open.id() {
-                let mut config = shared.config.lock().unwrap();
-                config.auto_open_links = auto_open.is_checked();
-                config.save();
-            } else if id == *autostart.id() {
-                winutil::set_start_with_windows(autostart.is_checked());
-            } else if id == *quit.id() {
-                return;
-            } else if let Some((_, entry)) = recent_items.iter().find(|(item, _)| *item.id() == id)
-            {
-                match entry {
-                    Recent::Text(text) => {
-                        copy(text);
-                        if let Some(link) = winutil::find_link(text) {
-                            winutil::open(link);
-                        }
-                    }
-                    Recent::File(path) => winutil::reveal(path),
+            WinEvent::UserEvent(UserEvent::Tray(TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            })) => hey.show(),
+            WinEvent::UserEvent(UserEvent::Menu(e)) => {
+                if e.id == *open.id() {
+                    hey.show();
+                } else if e.id == *pair.id() {
+                    app.start_pairing();
+                    hey.show();
+                    hey.update(&app.state());
+                } else if e.id == *quit.id() {
+                    tray.take();
+                    *flow = ControlFlow::Exit;
                 }
             }
-        }
-
-        while let Ok(event) = events.try_recv() {
-            match event {
-                Event::Received { device, text } => {
-                    let auto_open = shared.config.lock().unwrap().auto_open_links;
-                    notify_text_received(&device, &text, auto_open);
-                    add_recent(
-                        &recent,
-                        &empty,
-                        &mut recent_items,
-                        preview(&text, 48),
-                        Recent::Text(text),
-                    );
+            WinEvent::UserEvent(UserEvent::Server(event)) => {
+                if let Some(message) = app.on_server(event) {
+                    hey.toast(&message);
                 }
-                Event::File {
-                    device,
-                    path,
-                    index,
-                    count,
-                } => {
-                    let label =
-                        format!("{}  {}", files::kind(&path), preview(&file_name(&path), 40));
-                    add_recent(
-                        &recent,
-                        &empty,
-                        &mut recent_items,
-                        label,
-                        Recent::File(path.clone()),
-                    );
-                    batches.entry(device.clone()).or_default().push(path);
-                    if index + 1 >= count {
-                        let batch = batches.remove(&device).unwrap_or_default();
-                        notify_files(&device, &batch);
-                    }
-                }
-                Event::Paired { device } => {
-                    phones.set_text(phone_count(&shared));
-                    winutil::notify_text(
-                        &format!("Paired with {device}"),
-                        "Share anything to Hey on your phone and it shows up here.",
-                    );
-                }
+                hey.update(&app.state());
             }
+            WinEvent::UserEvent(UserEvent::Page(message)) => {
+                if let Some(reply) = app.on_page(&message) {
+                    hey.toast(&reply);
+                }
+                hey.update(&app.state());
+            }
+            _ => {}
         }
-
-        std::thread::sleep(Duration::from_millis(40));
-    }
+    });
 }
 
-fn add_recent(
-    menu: &Submenu,
-    empty: &MenuItem,
-    items: &mut Vec<(MenuItem, Recent)>,
-    label: String,
-    entry: Recent,
-) {
-    if items.is_empty() {
-        let _ = menu.remove(empty);
+impl App {
+    fn start_pairing(&mut self) {
+        let key = config::random_token(18);
+        *self.shared.pending_pair.lock().unwrap() = Some((key.clone(), Instant::now()));
+        let link = pairing::link(&self.shared.config.lock().unwrap(), self.port, &key);
+        let expires = feed::now_ms() + PAIRING_MINUTES * 60 * 1000;
+        self.pairing = Some((link, expires));
     }
-    let item = MenuItem::new(label, true, None);
-    let _ = menu.prepend(&item);
-    items.insert(0, (item, entry));
-    if items.len() > RECENT_LIMIT {
-        let (old, _) = items.pop().unwrap();
-        let _ = menu.remove(&old);
+
+    fn cancel_pairing(&mut self) {
+        self.pairing = None;
+        *self.shared.pending_pair.lock().unwrap() = None;
+    }
+
+    /// Everything the page shows.
+    fn state(&self) -> Value {
+        let config = self.shared.config.lock().unwrap();
+        let mut devices: Vec<_> = config
+            .devices
+            .iter()
+            .map(|d| json!({"name": d.name, "last_seen": d.last_seen}))
+            .collect();
+        devices.sort_by_key(|d| std::cmp::Reverse(d["last_seen"].as_u64()));
+        json!({
+            "version": env!("CARGO_PKG_VERSION"),
+            "pc": config::pc_name(),
+            "devices": devices,
+            "settings": {
+                "auto_open": config.auto_open_links,
+                "autostart": winutil::starts_with_windows(),
+                "folder": files::folder().to_string_lossy(),
+            },
+            "items": self.feed.items,
+            "pairing": self.pairing.as_ref().map(|(link, expires)| json!({
+                "qr": pairing::qr_svg(link),
+                "link": link,
+                "expires": expires,
+            })),
+        })
+    }
+
+    /// Handles something a phone sent. Returns a message for the window.
+    fn on_server(&mut self, event: Event) -> Option<String> {
+        match event {
+            Event::Received { device, text } => {
+                let auto_open = self.shared.config.lock().unwrap().auto_open_links;
+                let found = actions::find(&text);
+                self.feed.add_text(&device, &text, &found);
+                notify_text_received(&device, &text, &found, auto_open);
+                None
+            }
+            Event::File {
+                device,
+                path,
+                index,
+                count,
+            } => {
+                let id = self.feed.add_file(&device, &path);
+                self.batches
+                    .entry(device.clone())
+                    .or_default()
+                    .push((path, id));
+                if index + 1 >= count {
+                    let batch = self.batches.remove(&device).unwrap_or_default();
+                    notify_files(&device, &batch);
+                }
+                None
+            }
+            Event::Paired { device } => {
+                self.pairing = None;
+                winutil::notify_text(
+                    &format!("Paired with {device}"),
+                    "Share anything to Hey on your phone and it shows up here.",
+                );
+                Some(format!("Paired with {device}"))
+            }
+            Event::Seen => None,
+        }
+    }
+
+    /// Handles a click in the window. Returns a message to show there.
+    fn on_page(&mut self, message: &str) -> Option<String> {
+        let request: Value = serde_json::from_str(message).ok()?;
+        let cmd = request["cmd"].as_str().unwrap_or("");
+        let item = request["id"]
+            .as_u64()
+            .and_then(|id| self.feed.get(id))
+            .cloned();
+        match (cmd, item) {
+            ("ready", _) => None,
+            ("pair", _) => {
+                self.start_pairing();
+                None
+            }
+            ("cancelPair", _) => {
+                self.cancel_pairing();
+                None
+            }
+            ("copyPairLink", _) => {
+                let (link, _) = self.pairing.as_ref()?;
+                copy(link);
+                Some("Pairing link copied. Paste it in Hey on your phone.".into())
+            }
+            ("open", Some(item)) => {
+                match (&item.link, &item.path) {
+                    (Some(link), _) => winutil::open(link),
+                    (None, Some(path)) if Path::new(path).exists() => winutil::open(path),
+                    (None, Some(_)) => {
+                        return Some("That file isn't in Downloads\\Hey anymore.".into());
+                    }
+                    _ => {}
+                }
+                None
+            }
+            ("copy", Some(item)) => match (&item.text, &item.path) {
+                (Some(text), _) => {
+                    copy(text);
+                    Some("Copied".into())
+                }
+                (None, Some(path)) if files::copy_image(Path::new(path)) => {
+                    Some("Photo copied. Paste it anywhere.".into())
+                }
+                _ => Some("Couldn't copy that.".into()),
+            },
+            ("copyCode", Some(item)) => {
+                copy(item.code.as_deref()?);
+                Some("Code copied".into())
+            }
+            ("reveal", Some(item)) => {
+                winutil::reveal(Path::new(item.path.as_deref()?));
+                None
+            }
+            ("clear", _) => {
+                self.feed.clear();
+                None
+            }
+            ("remove", Some(item)) => {
+                self.feed.remove(item.id);
+                None
+            }
+            ("openFolder", _) => {
+                winutil::open(&files::folder().to_string_lossy());
+                None
+            }
+            ("openUrl", _) => {
+                let url = request["url"].as_str()?;
+                if url.starts_with("https://github.com/joelcave42/") {
+                    winutil::open(url);
+                }
+                None
+            }
+            ("set", _) => {
+                let on = request["value"].as_bool().unwrap_or(false);
+                match request["key"].as_str()? {
+                    "auto_open" => {
+                        let mut config = self.shared.config.lock().unwrap();
+                        config.auto_open_links = on;
+                        config.save();
+                    }
+                    "autostart" => winutil::set_start_with_windows(on),
+                    _ => {}
+                }
+                None
+            }
+            ("forget", _) => {
+                let name = request["name"].as_str()?;
+                let mut config = self.shared.config.lock().unwrap();
+                config.devices.retain(|d| d.name != name);
+                config.save();
+                Some(format!("Forgot {name}"))
+            }
+            _ => None,
+        }
     }
 }
 
 /// Copies text from the phone and shows it with buttons that fit what it is.
 /// A sign-in code puts just the code on the clipboard.
-fn notify_text_received(device: &str, text: &str, auto_open: bool) {
-    let found = actions::find(text);
+fn notify_text_received(device: &str, text: &str, found: &actions::Found, auto_open: bool) {
     let copy_link = |s: &str| format!("hey-action:copy?text={}", url::encode(s));
     copy(found.code.as_deref().unwrap_or(text));
 
@@ -314,16 +426,14 @@ fn notify_text_received(device: &str, text: &str, auto_open: bool) {
 
 /// One notification for whatever the phone just sent: a single file gets a
 /// preview and Open buttons, a batch gets a summary.
-fn notify_files(device: &str, batch: &[PathBuf]) {
-    let Some(last) = batch.last() else { return };
-    let image = if files::is_image(last) {
-        files::thumbnail(last)
-    } else {
-        None
+fn notify_files(device: &str, batch: &[(PathBuf, u64)]) {
+    let Some((last, last_id)) = batch.last() else {
+        return;
     };
+    let image = Some(feed::thumb_path(*last_id)).filter(|p| files::is_image(last) && p.exists());
     let folder = action("folder", None);
 
-    let toast = if let [path] = batch {
+    let toast = if let [(path, _)] = batch {
         let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
         let copied = files::is_image(path) && files::copy_image(path);
         let mut body = format!("{} · {}", file_name(path), files::human_size(size));
@@ -341,7 +451,7 @@ fn notify_files(device: &str, batch: &[PathBuf]) {
             ],
         }
     } else {
-        let kinds: Vec<&str> = batch.iter().map(|p| files::kind(p)).collect();
+        let kinds: Vec<&str> = batch.iter().map(|(p, _)| files::kind(p)).collect();
         let same = kinds.iter().all(|k| *k == kinds[0]);
         let noun = match kinds[0] {
             "Photo" if same => "photos",
@@ -395,6 +505,7 @@ fn run_action(link: &str) {
         ("open", Some(p)) if inside_hey(&p) => winutil::open(&p.to_string_lossy()),
         ("reveal", Some(p)) if inside_hey(&p) => winutil::reveal(&p),
         ("folder", _) => winutil::open(&files::folder().to_string_lossy()),
+        ("show", _) => winutil::show_running_window(),
         _ => {}
     }
 }
@@ -417,13 +528,5 @@ fn preview(text: &str, max: usize) -> String {
         format!("{}…", flat.chars().take(max - 1).collect::<String>())
     } else {
         flat
-    }
-}
-
-fn phone_count(shared: &Shared) -> String {
-    match shared.config.lock().unwrap().devices.len() {
-        0 => "No phones paired".to_string(),
-        1 => "1 phone paired".to_string(),
-        n => format!("{n} phones paired"),
     }
 }

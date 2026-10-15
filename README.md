@@ -31,8 +31,10 @@ notification that opens the link.
   addresses get **Email**, phone numbers get **Copy number**.
 - **Auto-open links:** tick **Open links automatically** in the tray menu and
   links open in your browser the moment they arrive.
-- **Tray menu:** the last 8 things you sent are under **Recent**, and
-  **Open Hey folder** opens `Downloads\Hey`.
+- **The Hey window on your PC:** click the tray icon to see everything you've
+  received, with photo thumbnails, search and filters, and Open / Copy / Show
+  in folder on each item. Your phones and settings are in the sidebar, and
+  pairing happens right in the window.
 
 ## How it works
 
@@ -69,7 +71,7 @@ cargo build --release
 ```
 
 Run `windows/target/release/hey.exe`. Hey appears in the system tray and opens
-the pairing page. When Windows Firewall asks, allow Hey on **private
+its window with a pairing code. When Windows Firewall asks, allow Hey on **private
 networks**. Tick **Start with Windows** in the tray menu to keep it running.
 
 ### Android
@@ -91,9 +93,12 @@ Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
 | `windows/src/server.rs` | TLS listener, pairing and request handling |
 | `windows/src/actions.rs` | Spots codes, links, addresses, emails and phone numbers |
 | `windows/src/files.rs` | Saves incoming files, thumbnails, photo to clipboard |
-| `windows/src/pairing.rs` | QR pairing page |
+| `windows/src/pairing.rs` | Pairing links and QR codes |
+| `windows/src/window.rs` | The Hey window (WebView2) |
+| `windows/src/feed.rs` | Everything received, saved for the window |
+| `windows/ui/index.html` | The window's interface |
 | `windows/src/winutil.rs` | Notifications, registry, opening links |
-| `windows/src/main.rs` | Tray icon, menu and event loop |
+| `windows/src/main.rs` | Tray icon, window events and actions |
 | `android/.../ui/` | Jetpack Compose screens: home, pairing, theme |
 | `android/.../History.kt` | The Recent list, kept on the phone |
 | `android/.../HeyClient.kt` | Pinned TLS client and mDNS discovery |
@@ -126,7 +131,7 @@ Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
 - [ ] Phone notifications on the PC
 - [ ] Reply to texts from the PC
 - [ ] Phone battery in the tray, and ring my phone
-- [ ] Searchable history of everything sent
+- [x] Searchable history of everything received, in the Hey window
 
 **v0.5: remote control**
 - [ ] Media remote: play/pause, skip and volume

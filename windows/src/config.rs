@@ -13,6 +13,9 @@ pub struct Device {
     pub name: String,
     /// SHA-256 of the device's secret token, so the token itself never sits on disk.
     pub token_hash: String,
+    /// When this phone last talked to the PC, in milliseconds since 1970.
+    #[serde(default)]
+    pub last_seen: u64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -86,11 +89,6 @@ impl Config {
     /// SHA-256 of the certificate, which the phone pins after scanning the QR code.
     pub fn fingerprint(&self) -> String {
         b64(&Sha256::digest(unb64(&self.cert_der)))
-    }
-
-    pub fn device_for_token(&self, token: &str) -> Option<&Device> {
-        let h = hash(token);
-        self.devices.iter().find(|d| d.token_hash == h)
     }
 }
 

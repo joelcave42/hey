@@ -111,30 +111,12 @@ pub fn kind(path: &Path) -> &'static str {
     }
 }
 
-/// A small JPEG for the notification. Windows won't show big images in a
-/// notification, and phone photos are big.
-pub fn thumbnail(path: &Path) -> Option<PathBuf> {
-    let image = image::open(path).ok()?;
-    let thumb = image.thumbnail(720, 720).to_rgb8();
-    let dir = crate::config::dir().join("thumbs");
-    let _ = fs::create_dir_all(&dir);
-    // Keep only the latest few.
-    if let Ok(entries) = fs::read_dir(&dir) {
-        let mut old: Vec<_> = entries.flatten().map(|e| e.path()).collect();
-        old.sort();
-        for p in old.iter().rev().skip(20) {
-            let _ = fs::remove_file(p);
-        }
-    }
-    let out = dir.join(format!(
-        "{}.jpg",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-    ));
-    thumb.save(&out).ok()?;
-    Some(out)
+/// Saves a small JPEG of a photo for the notification and the Hey window.
+/// Windows won't show big images in a notification, and phone photos are big.
+pub fn thumbnail_to(path: &Path, out: &Path) -> bool {
+    image::open(path)
+        .map(|image| image.thumbnail(720, 720).to_rgb8().save(out).is_ok())
+        .unwrap_or(false)
 }
 
 /// Puts a photo on the clipboard so it can be pasted straight into Discord,
