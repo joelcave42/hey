@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Hey</string>
+    <string name="share_label">Send to PC</string>
+    <string name="tile_label">Send clipboard</string>
+</resources>

@@ -1,0 +1,8 @@
+<resources>
+    <color name="brand">#5B5BF6</color>
+    <color name="background">#F4F4F8</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="text">#14151A</color>
+    <color name="muted">#5D6070</color>
+    <color name="line">#E4E4EC</color>
+</resources>

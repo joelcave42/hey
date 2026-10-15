@@ -1,0 +1,14 @@
+# Rust
+windows/target/
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+.idea/
+*.iml
+
+# Test client state (holds a real device token)
+tools/.fake_phone.json
+__pycache__/
