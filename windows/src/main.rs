@@ -4,6 +4,7 @@
 //! photos and files from paired Android phones. Text and single photos are
 //! copied to the clipboard; everything is shown in a notification.
 
+mod actions;
 mod config;
 mod files;
 mod icon;
@@ -185,26 +186,8 @@ fn main() {
         while let Ok(event) = events.try_recv() {
             match event {
                 Event::Received { device, text } => {
-                    copy(&text);
-                    let link = winutil::find_link(&text);
-                    let opened = link.is_some() && shared.config.lock().unwrap().auto_open_links;
-                    if let (true, Some(link)) = (opened, link) {
-                        winutil::open(link);
-                    }
-                    let title = match (link, opened) {
-                        (Some(_), true) => format!("Opened a link from {device}"),
-                        (Some(_), false) => format!("Link from {device}"),
-                        (None, _) => format!("From {device}"),
-                    };
-                    winutil::notify(&Toast {
-                        title,
-                        body: format!("{}\nCopied to your clipboard.", preview(&text, 180)),
-                        launch: link.map(str::to_string),
-                        buttons: link
-                            .map(|l| vec![("Open link".to_string(), l.to_string())])
-                            .unwrap_or_default(),
-                        ..Default::default()
-                    });
+                    let auto_open = shared.config.lock().unwrap().auto_open_links;
+                    notify_text_received(&device, &text, auto_open);
                     add_recent(
                         &recent,
                         &empty,
@@ -265,6 +248,68 @@ fn add_recent(
         let (old, _) = items.pop().unwrap();
         let _ = menu.remove(&old);
     }
+}
+
+/// Copies text from the phone and shows it with buttons that fit what it is.
+/// A sign-in code puts just the code on the clipboard.
+fn notify_text_received(device: &str, text: &str, auto_open: bool) {
+    let found = actions::find(text);
+    let copy_link = |s: &str| format!("hey-action:copy?text={}", url::encode(s));
+    copy(found.code.as_deref().unwrap_or(text));
+
+    let link = found.link.as_deref();
+    let opened = auto_open && link.is_some() && found.code.is_none();
+    if let (true, Some(link)) = (opened, link) {
+        winutil::open(link);
+    }
+
+    let mut buttons = Vec::new();
+    if let Some(code) = &found.code
+        && text.trim() != code
+        && text.len() < 1500
+    {
+        buttons.push(("Copy full message".to_string(), copy_link(text)));
+    }
+    if let Some(link) = link {
+        buttons.push(("Open link".to_string(), link.to_string()));
+    }
+    if let Some(address) = &found.address {
+        buttons.push((
+            "Open in Maps".to_string(),
+            format!(
+                "https://www.google.com/maps/search/?api=1&query={}",
+                url::encode(address)
+            ),
+        ));
+    }
+    if let Some(email) = &found.email {
+        buttons.push(("Email".to_string(), format!("mailto:{email}")));
+    }
+    if let Some(phone) = &found.phone
+        && text.trim() != phone
+    {
+        buttons.push(("Copy number".to_string(), copy_link(phone)));
+    }
+
+    let (title, note) = match (&found.code, link, opened) {
+        (Some(code), _, _) => (
+            format!("Code {code} from {device}"),
+            "Code copied. Paste it where you're signing in.",
+        ),
+        (None, Some(_), true) => (
+            format!("Opened a link from {device}"),
+            "Copied to your clipboard.",
+        ),
+        (None, Some(_), false) => (format!("Link from {device}"), "Copied to your clipboard."),
+        (None, None, _) => (format!("From {device}"), "Copied to your clipboard."),
+    };
+    winutil::notify(&Toast {
+        title,
+        body: format!("{}\n{note}", preview(text, 180)),
+        launch: link.map(str::to_string),
+        buttons,
+        ..Default::default()
+    });
 }
 
 /// One notification for whatever the phone just sent: a single file gets a
