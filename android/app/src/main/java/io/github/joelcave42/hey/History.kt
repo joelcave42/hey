@@ -11,7 +11,14 @@ object History {
 
     enum class Kind { Link, Text, Code, Photo, Video, File }
 
-    data class Entry(val kind: Kind, val label: String, val text: String?, val time: Long)
+    data class Entry(
+        val kind: Kind,
+        val label: String,
+        val text: String?,
+        val time: Long,
+        /** Came from the PC, rather than sent to it. */
+        val incoming: Boolean = false,
+    )
 
     private const val PREFS = "history"
     private const val LIMIT = 30
@@ -23,20 +30,20 @@ object History {
         return entries
     }
 
-    fun addText(context: Context, text: String) {
+    fun addText(context: Context, text: String, incoming: Boolean = false) {
         val trimmed = text.trim()
         val code = Regex("""\b\d{4,8}\b""").find(trimmed)?.value
         val isCode = code != null && (trimmed == code || Regex("(?i)code|otp|verif|pin|sign.?in|login").containsMatchIn(trimmed))
         val link = Regex("""https?://\S+""").find(trimmed)?.value
         val entry = when {
-            isCode -> Entry(Kind.Code, "Code $code", trimmed, now())
-            link != null -> Entry(Kind.Link, link.removePrefix("https://").removePrefix("http://"), trimmed, now())
-            else -> Entry(Kind.Text, trimmed.lines().first().take(80), trimmed, now())
+            isCode -> Entry(Kind.Code, "Code $code", trimmed, now(), incoming)
+            link != null -> Entry(Kind.Link, link.removePrefix("https://").removePrefix("http://"), trimmed, now(), incoming)
+            else -> Entry(Kind.Text, trimmed.lines().first().take(80), trimmed, now(), incoming)
         }
         add(context, entry)
     }
 
-    fun addFiles(context: Context, names: List<String>) {
+    fun addFiles(context: Context, names: List<String>, incoming: Boolean = false) {
         if (names.isEmpty()) return
         val kinds = names.map(::kindOf)
         val kind = if (kinds.all { it == kinds[0] }) kinds[0] else Kind.File
@@ -45,7 +52,7 @@ object History {
             Kind.Video -> "${names.size} videos"
             else -> "${names.size} files"
         }
-        add(context, Entry(kind, label, null, now()))
+        add(context, Entry(kind, label, null, now(), incoming))
     }
 
     fun clear(context: Context) {
@@ -78,6 +85,7 @@ object History {
                     o.getString("label"),
                     o.optString("text").ifEmpty { null },
                     o.getLong("time"),
+                    o.optBoolean("incoming"),
                 )
             }
         }.getOrDefault(emptyList())
@@ -88,7 +96,7 @@ object History {
         list.forEach {
             array.put(
                 JSONObject().put("kind", it.kind.name).put("label", it.label)
-                    .put("text", it.text ?: "").put("time", it.time)
+                    .put("text", it.text ?: "").put("time", it.time).put("incoming", it.incoming)
             )
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("entries", array.toString()).apply()

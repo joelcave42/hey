@@ -64,6 +64,8 @@ private fun HeyApp(activity: ComponentActivity) {
     var status by remember { mutableStateOf<Status>(Status.Checking) }
     var pairing by remember { mutableStateOf(false) }
     val history by History.entries(context).collectAsState()
+    val receiveConnected by ReceiveService.connected.collectAsState()
+    var receiving by remember { mutableStateOf(ReceiveService.isEnabled(context)) }
 
     fun say(message: String) = scope.launch { snackbar.showSnackbar(message) }
 
@@ -101,6 +103,7 @@ private fun HeyApp(activity: ComponentActivity) {
 
     LifecycleResumeEffect(pc?.token) {
         check()
+        ReceiveService.start(context)
         onPauseOrDispose { }
     }
 
@@ -135,6 +138,8 @@ private fun HeyApp(activity: ComponentActivity) {
         pc = current,
         status = status,
         history = history.orEmpty(),
+        receiving = receiving,
+        receiveConnected = receiveConnected,
         snackbar = snackbar,
         actions = HomeActions(
             retry = ::check,
@@ -157,8 +162,14 @@ private fun HeyApp(activity: ComponentActivity) {
             } else null,
             clearHistory = { History.clear(context) },
             unpair = {
+                ReceiveService.setEnabled(context, false)
                 Pc.forget(context)
+                ReceiveService.setEnabled(context, true)
                 pc = null
+            },
+            setReceiving = { on ->
+                receiving = on
+                ReceiveService.setEnabled(context, on)
             },
         ),
     )

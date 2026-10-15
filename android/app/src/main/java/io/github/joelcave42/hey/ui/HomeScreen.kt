@@ -46,6 +46,7 @@ import androidx.compose.material.icons.rounded.LinkOff
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.MoveToInbox
 import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Replay
@@ -63,6 +64,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.Switch
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -110,6 +112,7 @@ class HomeActions(
     val addTile: (() -> Unit)?,
     val clearHistory: () -> Unit,
     val unpair: () -> Unit,
+    val setReceiving: (Boolean) -> Unit,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -118,6 +121,8 @@ fun HomeScreen(
     pc: Pc,
     status: Status,
     history: List<History.Entry>,
+    receiving: Boolean,
+    receiveConnected: Boolean,
     snackbar: SnackbarHostState,
     actions: HomeActions,
 ) {
@@ -148,6 +153,7 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { PcCard(pc, status, onClick = actions.retry) }
+            item { ReceiveRow(receiving, receiveConnected, actions.setReceiving) }
             item { Spacer(Modifier.height(4.dp)) }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -324,6 +330,42 @@ private fun StatusLine(status: Status) {
 }
 
 @Composable
+private fun ReceiveRow(on: Boolean, connected: Boolean, onChange: (Boolean) -> Unit) {
+    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceContainer, onClick = { onChange(!on) }) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Accent.Files.copy(alpha = 0.16f)),
+            ) {
+                Icon(Icons.Rounded.MoveToInbox, null, tint = Accent.Files, modifier = Modifier.size(22.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Receive from PC", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    when {
+                        !on -> "Off"
+                        connected -> "Ready · send from the Hey window"
+                        else -> "Waiting for your PC…"
+                    },
+                    fontSize = 13.sp,
+                    color = if (on && connected) Accent.Good else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = on, onCheckedChange = onChange)
+        }
+    }
+}
+
+@Composable
 private fun ActionTile(
     icon: ImageVector,
     label: String,
@@ -397,7 +439,7 @@ private fun RecentRow(entry: History.Entry, onResend: (History.Entry) -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(entry.label, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    timeAgo(entry.time),
+                    (if (entry.incoming) "From PC · " else "") + timeAgo(entry.time),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

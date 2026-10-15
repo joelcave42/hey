@@ -9,6 +9,7 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Base64
 import org.json.JSONObject
+import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -77,9 +78,14 @@ class HeyClient(private val context: Context) {
 
     /** Tries the PC's known addresses, then looks for it on the network if they've changed. */
     private fun request(pc: Pc, body: JSONObject, payload: ((OutputStream) -> Unit)? = null): JSONObject {
+        return connectAny(pc) { host, port -> exchange(host, port, pc.fingerprint, body, payload) }
+    }
+
+    /** Runs [attempt] against each known address, then wherever mDNS says the PC is now. */
+    private fun <T> connectAny(pc: Pc, attempt: (host: String, port: Int) -> T): T {
         for (address in pc.addresses) {
             try {
-                return exchange(address, pc.port, pc.fingerprint, body, payload)
+                return attempt(address, pc.port)
             } catch (e: HeyException) {
                 throw e
             } catch (_: IOException) {
@@ -89,8 +95,8 @@ class HeyClient(private val context: Context) {
         val found = discover(pc) ?: throw HeyException(
             "Can't find ${pc.name}. Make sure Hey is running on it and you're on the same Wi-Fi."
         )
-        val reply = try {
-            exchange(found.first, found.second, pc.fingerprint, body, payload)
+        val result = try {
+            attempt(found.first, found.second)
         } catch (e: HeyException) {
             throw e
         } catch (_: IOException) {
@@ -99,7 +105,53 @@ class HeyClient(private val context: Context) {
         if (pc.token.isNotEmpty()) {
             pc.copy(addresses = listOf(found.first) + (pc.addresses - found.first), port = found.second).save(context)
         }
-        return reply
+        return result
+    }
+
+    /**
+     * An open connection the PC pushes things down (see push.rs on the PC).
+     * Lines are JSON; a file's bytes follow its line on the same stream.
+     */
+    class Listener(private val socket: SSLSocket) : AutoCloseable {
+        val input = BufferedInputStream(socket.inputStream, 64 * 1024)
+        private val output = BufferedOutputStream(socket.outputStream)
+
+        /** Reads one line as bytes, so file bytes after it stay in [input]. */
+        fun readLine(): String? {
+            val bytes = java.io.ByteArrayOutputStream()
+            while (true) {
+                val b = input.read()
+                if (b == -1) return null
+                if (b == '\n'.code) return bytes.toString("UTF-8")
+                bytes.write(b)
+                if (bytes.size() > 1 shl 20) throw IOException("Line too long")
+            }
+        }
+
+        fun send(json: JSONObject) {
+            output.write((json.toString() + "\n").toByteArray())
+            output.flush()
+        }
+
+        override fun close() = socket.close()
+    }
+
+    /** Opens the always-ready connection. The PC pings every 25 seconds. */
+    fun listen(pc: Pc): Listener = connectAny(pc) { host, port ->
+        val raw = Socket()
+        raw.connect(InetSocketAddress(host, port), 1500)
+        raw.soTimeout = 75_000
+        raw.keepAlive = true
+        val tls = pinnedContext(pc.fingerprint).socketFactory.createSocket(raw, host, port, true) as SSLSocket
+        tls.startHandshake()
+        val listener = Listener(tls)
+        listener.send(JSONObject().put("t", "listen").put("token", pc.token))
+        val reply = JSONObject(listener.readLine() ?: throw IOException("No reply"))
+        if (!reply.optBoolean("ok")) {
+            listener.close()
+            throw HeyException(reply.optString("error", "Your PC said no."))
+        }
+        listener
     }
 
     private fun exchange(
