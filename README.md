@@ -85,11 +85,43 @@ Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
 
 ## Roadmap
 
-- [x] Phone → PC links and text
-- [ ] Files, both ways
-- [ ] PC → phone
-- [ ] Works away from home Wi-Fi
-- [ ] Installer for Windows, APK on GitHub Releases
+**v0.1: links and text**
+- [x] Phone → PC links and text from the share sheet, text selection and a quick settings tile
+- [x] One-time QR pairing with a pinned certificate
+- [x] Finds the PC again with mDNS when its IP changes
+
+**v0.2: make the basics feel instant**
+- [ ] Photos and files → PC, saved to `Downloads\Hey`
+- [ ] Auto-open links as they arrive
+- [ ] Smart actions: phone numbers, addresses, codes and video links get the right button
+
+**v0.3: both directions**
+- [ ] PC → phone: **Send to phone** in Explorer's right-click menu, and from the tray
+- [ ] Clipboard sync
+- [ ] Screenshot a region and send it to the phone with one hotkey
+- [ ] Drag and drop onto the tray icon
+- [ ] Pair without a QR code: tap your PC on the phone and confirm a matching code
+
+**v0.4: phone ↔ PC awareness**
+- [ ] 2FA codes from texts pop up on the PC, already copied
+- [ ] Phone notifications on the PC
+- [ ] Reply to texts from the PC
+- [ ] Phone battery in the tray, and ring my phone
+- [ ] Searchable history of everything sent
+
+**v0.5: remote control**
+- [ ] Media remote: play/pause, skip and volume
+- [ ] Phone as trackpad and keyboard
+- [ ] Lock or sleep the PC from the phone
+- [ ] Several phones and PCs, and choosing where to send
+
+**v1.0: ship it**
+- [ ] Works away from home Wi-Fi (through Tailscale, still no servers)
+- [ ] Windows installer, APK on GitHub Releases, auto-updates
+- [ ] Home screen widget and Samsung Edge panel
+
+**Someday**
+- [ ] Stream a PC window to the phone
 
 ## License
 
