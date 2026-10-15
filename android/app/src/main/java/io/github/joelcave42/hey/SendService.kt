@@ -15,6 +15,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
 import android.provider.OpenableColumns
+import android.util.Log
 import android.widget.Toast
 import java.io.File
 import java.util.concurrent.Executors
@@ -41,6 +42,16 @@ class SendService : Service() {
             }
             context.startForegroundService(intent)
         }
+
+        /**
+         * Sends text from the share sheet or the clipboard tile. Those screens
+         * close straight away, and with battery saving on Android cuts the
+         * network for apps in the background, so text goes through this
+         * service too.
+         */
+        fun startText(context: Context, text: String) {
+            context.startForegroundService(Intent(context, SendService::class.java).putExtra("text", text))
+        }
     }
 
     private val worker = Executors.newSingleThreadExecutor()
@@ -50,22 +61,25 @@ class SendService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startInForeground(progressNotification("Getting ready…", 0, 0))
+        startInForeground(progressNotification("Sending to your PC…", 0, 0))
         @Suppress("DEPRECATION")
         val uris = intent?.getParcelableArrayListExtra<Uri>("uris").orEmpty()
-        if (uris.isEmpty()) {
+        val text = intent?.getStringExtra("text")
+        if (uris.isEmpty() && text == null) {
             finishIfIdle()
             return START_NOT_STICKY
         }
         pending++
         worker.execute {
             val message = try {
-                send(uris)
+                if (text != null) sendText(text) else send(uris)
             } catch (e: HeyClient.HeyException) {
                 e.message
             } catch (e: Exception) {
+                Log.w(TAG, "Sending failed", e)
                 "Couldn't send: ${e.message}"
             }
+            Log.i(TAG, "Send finished: $message")
             main.post {
                 Toast.makeText(this, message, Toast.LENGTH_LONG).show()
                 pending--
@@ -76,6 +90,12 @@ class SendService : Service() {
     }
 
     private data class Item(val uri: Uri, val name: String, val size: Long)
+
+    private fun sendText(text: String): String {
+        val pc = Pc.load(this) ?: return "Open Hey and pair it with your PC first."
+        HeyClient(this).sendText(pc, text)
+        return "Sent to ${pc.name}"
+    }
 
     /** Sends a batch and returns what to tell the user. */
     private fun send(uris: List<Uri>): String {

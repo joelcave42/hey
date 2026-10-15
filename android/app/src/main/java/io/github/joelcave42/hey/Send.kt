@@ -8,8 +8,11 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.Toast
 import kotlin.concurrent.thread
+
+const val TAG = "Hey"
 
 /** Sends text to the paired PC in the background and says how it went in a toast. */
 fun sendToPc(context: Context, text: String, onDone: (Boolean) -> Unit = {}) {
@@ -34,12 +37,26 @@ fun sendToPc(context: Context, text: String, onDone: (Boolean) -> Unit = {}) {
         } catch (e: HeyClient.HeyException) {
             e.message
         } catch (e: Exception) {
+            Log.w(TAG, "Sending text failed", e)
             "Couldn't send to ${pc.name}: ${e.message}"
         }
+        Log.i(TAG, if (error == null) "Sent text (${text.length} chars)" else "Text not sent: $error")
         main.post {
             Toast.makeText(app, error ?: "Sent to ${pc.name}", if (error == null) Toast.LENGTH_SHORT else Toast.LENGTH_LONG).show()
             onDone(error == null)
         }
+    }
+}
+
+/**
+ * Sends text from a screen that closes straight away (the share sheet, the
+ * clipboard tile), handing the network part to [SendService].
+ */
+fun sendFromBackground(context: Context, text: String) {
+    when {
+        Pc.load(context) == null -> sendToPc(context, text) // explains pairing
+        text.isBlank() -> Toast.makeText(context, "Nothing to send.", Toast.LENGTH_SHORT).show()
+        else -> SendService.startText(context, text)
     }
 }
 
@@ -48,6 +65,7 @@ class ShareActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val files = sharedFiles()
+        Log.i(TAG, "Share received: ${intent.action}, ${files.size} file(s), text=${intent.hasExtra(Intent.EXTRA_TEXT)}")
         if (files.isNotEmpty()) {
             try {
                 if (Pc.load(this) == null) sendToPc(this, "") else SendService.start(this, files)
@@ -62,7 +80,7 @@ class ShareActivity : Activity() {
             Intent.ACTION_PROCESS_TEXT -> intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
             else -> intent.getStringExtra(Intent.EXTRA_TEXT)
         }
-        sendToPc(this, text.orEmpty())
+        sendFromBackground(this, text.orEmpty())
         finish()
     }
 
@@ -93,7 +111,7 @@ class ClipboardActivity : Activity() {
         if (text.isBlank()) {
             Toast.makeText(this, "Your clipboard is empty.", Toast.LENGTH_SHORT).show()
         } else {
-            sendToPc(this, text)
+            sendFromBackground(this, text)
         }
         finish()
     }
