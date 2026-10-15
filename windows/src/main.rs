@@ -94,12 +94,16 @@ fn main() {
         .build()
         .expect("could not create the tray icon");
 
+    let pairing_page = Arc::new(Mutex::new(String::new()));
+    let pairing_url = pairing::serve(pairing_page.clone()).ok();
     let open_pairing = || {
         let key = config::random_token(18);
         *shared.pending_pair.lock().unwrap() = Some((key.clone(), Instant::now()));
         let config = shared.config.lock().unwrap();
-        let page = pairing::write_page(&pairing::link(&config, port, &key));
-        winutil::open(&page.to_string_lossy());
+        *pairing_page.lock().unwrap() = pairing::page(&pairing::link(&config, port, &key));
+        if let Some(url) = &pairing_url {
+            winutil::open(url);
+        }
     };
 
     if first_run {

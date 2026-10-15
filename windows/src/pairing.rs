@@ -5,7 +5,10 @@
 use crate::config::{self, Config};
 use qrcode::QrCode;
 use qrcode::render::svg;
-use std::path::PathBuf;
+use std::io::{Read, Write};
+use std::net::TcpListener;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 pub fn link(config: &Config, port: u16, key: &str) -> String {
     let ips: Vec<String> = if_addrs::get_if_addrs()
@@ -35,8 +38,43 @@ fn percent(s: &str) -> String {
         .collect()
 }
 
-/// Writes the pairing page next to the config and returns its path.
-pub fn write_page(link: &str) -> PathBuf {
+/// Serves the current pairing page to this PC's browser only, on 127.0.0.1.
+/// A local web address opens reliably where a file path can't (some browsers
+/// break on paths with spaces, like C:\Users\Jane Doe). Returns the URL.
+pub fn serve(page: Arc<Mutex<String>>) -> std::io::Result<String> {
+    let listener = TcpListener::bind(("127.0.0.1", 0))?;
+    let url = format!("http://127.0.0.1:{}/", listener.local_addr()?.port());
+    let icon = crate::icon::png(128);
+    thread::spawn(move || {
+        for mut stream in listener.incoming().flatten() {
+            let mut request = [0u8; 2048];
+            let n = stream.read(&mut request).unwrap_or(0);
+            let path = String::from_utf8_lossy(&request[..n])
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or("/")
+                .to_string();
+            let (kind, body) = if path == "/icon.png" {
+                ("image/png", icon.clone())
+            } else {
+                (
+                    "text/html; charset=utf-8",
+                    page.lock().unwrap().clone().into_bytes(),
+                )
+            };
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(head.as_bytes());
+            let _ = stream.write_all(&body);
+        }
+    });
+    Ok(url)
+}
+
+/// Builds the pairing page for a pairing link.
+pub fn page(link: &str) -> String {
     let qr = QrCode::new(link.as_bytes())
         .map(|code| {
             code.render::<svg::Color>()
@@ -48,13 +86,9 @@ pub fn write_page(link: &str) -> PathBuf {
         })
         .unwrap_or_default();
     let name = html(&config::pc_name());
-    let page = PAGE
-        .replace("{{QR}}", &qr)
+    PAGE.replace("{{QR}}", &qr)
         .replace("{{NAME}}", &name)
-        .replace("{{LINK}}", &html(link));
-    let path = config::dir().join("pair.html");
-    let _ = std::fs::write(&path, page);
-    path
+        .replace("{{LINK}}", &html(link))
 }
 
 fn html(s: &str) -> String {
