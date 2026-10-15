@@ -13,7 +13,12 @@ data class Pc(
     /** Addresses to try first, most recent first. Found again over the network if they go stale. */
     val addresses: List<String>,
     val token: String = "",
+    /** What the user calls this PC, if they renamed it in the app. */
+    val nickname: String = "",
 ) {
+    /** The name to show: the nickname, or the PC's own name. */
+    val label: String get() = nickname.ifBlank { name }
+
     companion object {
         private const val PREFS = "pc"
 
@@ -44,6 +49,7 @@ data class Pc(
                 fingerprint = p.getString("fp", "")!!,
                 addresses = p.getString("ips", "")!!.split(',').filter { it.isNotBlank() },
                 token = token,
+                nickname = p.getString("nickname", "")!!,
             )
         }
 
@@ -60,6 +66,7 @@ data class Pc(
             .putString("fp", fingerprint)
             .putString("ips", addresses.joinToString(","))
             .putString("token", token)
+            .putString("nickname", nickname)
             .apply()
     }
 }

@@ -94,6 +94,7 @@ class SendService : Service() {
     private fun sendText(text: String): String {
         val pc = Pc.load(this) ?: return "Open Hey and pair it with your PC first."
         HeyClient(this).sendText(pc, text)
+        History.addText(this, text)
         return "Sent to ${pc.name}"
     }
 
@@ -122,6 +123,7 @@ class SendService : Service() {
             )
             done += item.size
         }
+        History.addFiles(this, items.map { it.name })
         return when (items.size) {
             1 -> "Sent ${items[0].name} to ${pc.name}"
             else -> "Sent ${items.size} files to ${pc.name}"

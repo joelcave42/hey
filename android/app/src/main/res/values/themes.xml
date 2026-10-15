@@ -1,14 +1,7 @@
 <resources>
-    <style name="Theme.Hey" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/brand</item>
-        <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorSecondaryContainer">@color/line</item>
-        <item name="colorOnSecondaryContainer">@color/text</item>
-        <item name="colorSurface">@color/surface</item>
-        <item name="android:colorBackground">@color/background</item>
+    <style name="Theme.Hey" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/background</item>
-        <item name="android:statusBarColor">@color/background</item>
-        <item name="android:navigationBarColor">@color/background</item>
+        <item name="android:colorBackground">@color/background</item>
     </style>
 
     <!-- The clipboard activity needs a window to get focus, but nothing should show. -->

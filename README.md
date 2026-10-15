@@ -14,6 +14,8 @@ notification that opens the link.
 - **Share sheet:** in any app, tap **Share → Hey**. Links, text, photos,
   videos and any other file, one or many at once.
 - **Selected text:** select text anywhere and pick **Hey** from the menu.
+- **In the app:** big buttons for **Clipboard**, **Photos**, **Files** and
+  **Type**, plus a **Recent** list where you can send anything again.
 - **Clipboard tile:** swipe down, tap **Send clipboard** in quick settings.
 - **Links and text on the PC:** copied to your clipboard and shown in a
   Windows notification. If there's a link (even inside a longer message, like
@@ -92,6 +94,8 @@ Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
 | `windows/src/pairing.rs` | QR pairing page |
 | `windows/src/winutil.rs` | Notifications, registry, opening links |
 | `windows/src/main.rs` | Tray icon, menu and event loop |
+| `android/.../ui/` | Jetpack Compose screens: home, pairing, theme |
+| `android/.../History.kt` | The Recent list, kept on the phone |
 | `android/.../HeyClient.kt` | Pinned TLS client and mDNS discovery |
 | `android/.../Send.kt` | Share target and clipboard sender |
 | `android/.../SendService.kt` | Sends photos and files with a progress bar |
