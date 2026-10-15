@@ -16,8 +16,12 @@ import android.os.Looper
 import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.util.Log
+import android.webkit.MimeTypeMap
 import android.widget.Toast
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
@@ -141,12 +145,27 @@ class SendService : Service() {
                     if (!c.isNull(1)) size = c.getLong(1)
                 }
             }
-        val finalName = name ?: uri.lastPathSegment?.substringAfterLast('/') ?: "file"
+        val finalName = friendlyName(name ?: uri.lastPathSegment?.substringAfterLast('/') ?: "file", uri)
         if (size >= 0) return Item(uri, finalName, size)
 
         val copy = File(cacheDir, "send-${System.nanoTime()}")
         contentResolver.openInputStream(uri)!!.use { input -> copy.outputStream().use { input.copyTo(it) } }
         return Item(Uri.fromFile(copy), finalName, copy.length())
+    }
+
+    /**
+     * Android's photo picker hides real file names and gives a number like
+     * "1000012345.jpg". Turn that into "Photo 2026-10-15 18.53.12.jpg".
+     */
+    private fun friendlyName(name: String, uri: Uri): String {
+        val stem = name.substringBeforeLast('.')
+        if (stem.isEmpty() || !stem.all(Char::isDigit)) return name
+        val ext = name.substringAfterLast('.', "").ifEmpty {
+            contentResolver.getType(uri)?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }.orEmpty()
+        }
+        val kind = if (contentResolver.getType(uri)?.startsWith("video/") == true) "Video" else "Photo"
+        val time = SimpleDateFormat("yyyy-MM-dd HH.mm.ss", Locale.US).format(Date())
+        return if (ext.isEmpty()) "$kind $time" else "$kind $time.$ext"
     }
 
     private fun openStream(item: Item) =
