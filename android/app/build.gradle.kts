@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.joelcave42.hey"
         minSdk = 29
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.4.1"
+        versionCode = 6
+        versionName = "0.5.0"
     }
 
     // Release builds are signed with a key that never goes in the repo: it's
