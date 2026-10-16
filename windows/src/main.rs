@@ -135,9 +135,16 @@ fn main() {
 
     let menu = Menu::new();
     let open = MenuItem::new("Open Hey", true, None);
+    let send_clipboard = MenuItem::new("Send clipboard to phone", true, None);
     let pair = MenuItem::new("Pair a phone…", true, None);
     let quit = MenuItem::new("Quit Hey", true, None);
-    let _ = menu.append_items(&[&open, &pair, &PredefinedMenuItem::separator(), &quit]);
+    let _ = menu.append_items(&[
+        &open,
+        &send_clipboard,
+        &pair,
+        &PredefinedMenuItem::separator(),
+        &quit,
+    ]);
     let mut tray = Some(
         TrayIconBuilder::new()
             .with_menu(Box::new(menu))
@@ -184,6 +191,13 @@ fn main() {
             WinEvent::UserEvent(UserEvent::Menu(e)) => {
                 if e.id == *open.id() {
                     hey.show();
+                } else if e.id == *send_clipboard.id() {
+                    // Same as the window's Clipboard button; say how it went in a
+                    // notification, since the window may be closed.
+                    if let Some(message) = app.on_page(r#"{"cmd":"sendClipboard"}"#) {
+                        winutil::notify_text("Hey", &message);
+                    }
+                    hey.update(&app.state());
                 } else if e.id == *pair.id() {
                     app.start_pairing();
                     hey.show();
@@ -468,12 +482,16 @@ impl App {
                 self.send_to_phone(vec![push::Outgoing::Text(text)])
             }
             ("sendClipboard", _) => {
-                let text = arboard::Clipboard::new()
-                    .and_then(|mut c| c.get_text())
-                    .ok();
-                match text.map(|t| t.trim().to_string()).filter(|t| !t.is_empty()) {
-                    Some(text) => self.send_to_phone(vec![push::Outgoing::Text(text)]),
-                    None => Some("Your clipboard has no text to send.".into()),
+                use files::Clipboard;
+                match files::read_clipboard() {
+                    Clipboard::Files(paths) => {
+                        self.send_to_phone(paths.into_iter().map(push::Outgoing::File).collect())
+                    }
+                    Clipboard::Text(text) => self.send_to_phone(vec![push::Outgoing::Text(text)]),
+                    Clipboard::Image(path) => self.send_to_phone(vec![push::Outgoing::File(path)]),
+                    Clipboard::Empty => Some(
+                        "Your clipboard is empty. Copy something, or snip with Win+Shift+S.".into(),
+                    ),
                 }
             }
             ("resetFolder", _) => {

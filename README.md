@@ -32,6 +32,10 @@ notification that opens the link.
   addresses get **Email**, phone numbers get **Copy number**.
 - **Auto-open links:** tick **Open links automatically** in the tray menu and
   links open in your browser the moment they arrive.
+- **Screenshots in one click:** snip with Win+Shift+S, then hit **Clipboard**
+  in the Hey window (or **Send clipboard to phone** in the tray). Copied files
+  and text work the same way, and the phone's Clipboard button sends copied
+  pictures too.
 - **PC → phone:** type or paste in the Hey window's send box, drop files on
   the window, or right-click any file in Explorer → **Send to phone with Hey**
   (on Windows 11 it's under **Show more options**). Links and text land on the

@@ -153,9 +153,7 @@ private fun HeyApp(activity: ComponentActivity) {
         actions = HomeActions(
             retry = ::check,
             sendClipboard = {
-                val text = clipboardText(context)
-                if (text.isBlank()) say("Your clipboard is empty. Copy something first.")
-                else SendService.startText(context, text)
+                if (!sendClipboard(context)) say("Your clipboard is empty. Copy something first.")
             },
             pickPhotos = {
                 pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))

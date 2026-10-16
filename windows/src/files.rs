@@ -151,6 +151,77 @@ pub fn copy_image(path: &Path) -> bool {
         .is_ok()
 }
 
+/// What's on the PC's clipboard, for the Clipboard button.
+pub enum Clipboard {
+    /// Files copied in File Explorer.
+    Files(Vec<PathBuf>),
+    Text(String),
+    /// A picture (like a Win+Shift+S snip), saved as a PNG to send.
+    Image(PathBuf),
+    Empty,
+}
+
+/// Reads the clipboard: copied files first, then text, then a picture. Text
+/// comes before pictures because apps like Excel copy both, and the text is
+/// what you meant.
+pub fn read_clipboard() -> Clipboard {
+    let Ok(mut clipboard) = arboard::Clipboard::new() else {
+        return Clipboard::Empty;
+    };
+    if let Ok(files) = clipboard.get().file_list() {
+        let files: Vec<_> = files.into_iter().filter(|p| p.is_file()).collect();
+        if !files.is_empty() {
+            return Clipboard::Files(files);
+        }
+    }
+    if let Ok(text) = clipboard.get_text()
+        && !text.trim().is_empty()
+    {
+        return Clipboard::Text(text.trim().to_string());
+    }
+    if let Ok(image) = clipboard.get_image()
+        && let Some(path) = save_clipboard_image(image)
+    {
+        return Clipboard::Image(path);
+    }
+    Clipboard::Empty
+}
+
+/// Saves a clipboard picture as "Screenshot 2026-10-15 19.52.08.png" in
+/// Hey's own folder, clearing out ones more than a week old.
+fn save_clipboard_image(image: arboard::ImageData) -> Option<PathBuf> {
+    let dir = crate::config::dir().join("outgoing");
+    fs::create_dir_all(&dir).ok()?;
+    let week = std::time::Duration::from_secs(7 * 24 * 60 * 60);
+    for old in fs::read_dir(&dir).into_iter().flatten().flatten() {
+        let stale = old
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age > week);
+        if stale {
+            let _ = fs::remove_file(old.path());
+        }
+    }
+    let buffer = image::RgbaImage::from_raw(
+        image.width as u32,
+        image.height as u32,
+        image.bytes.into_owned(),
+    )?;
+    let path = dir.join(format!("Screenshot {}.png", local_timestamp()));
+    buffer.save(&path).ok()?;
+    Some(path)
+}
+
+fn local_timestamp() -> String {
+    let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
+    format!(
+        "{}-{:02}-{:02} {:02}.{:02}.{:02}",
+        t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond
+    )
+}
+
 pub fn human_size(bytes: u64) -> String {
     match bytes {
         b if b >= 1 << 30 => format!("{:.1} GB", b as f64 / (1u64 << 30) as f64),

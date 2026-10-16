@@ -105,14 +105,32 @@ class ClipboardActivity : Activity() {
         super.onWindowFocusChanged(hasFocus)
         if (!hasFocus || sent) return
         sent = true
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = clipboard.primaryClip?.takeIf { it.itemCount > 0 }
-            ?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
-        if (text.isBlank()) {
+        if (!sendClipboard(this)) {
             Toast.makeText(this, "Your clipboard is empty.", Toast.LENGTH_SHORT).show()
-        } else {
-            sendFromBackground(this, text)
         }
         finish()
     }
+}
+
+/**
+ * Sends whatever is on the phone's clipboard: a copied picture or file goes
+ * as a file, anything else as text. Only works while Hey is in front, which
+ * is Android's rule for reading the clipboard. Returns false if it's empty.
+ */
+fun sendClipboard(context: Context): Boolean {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val clip = clipboard.primaryClip?.takeIf { it.itemCount > 0 } ?: return false
+    val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
+    if (uris.isNotEmpty() && Pc.load(context) != null) {
+        try {
+            SendService.start(context, uris)
+            return true
+        } catch (_: SecurityException) {
+            // The app that copied it didn't let others read it; fall back to its text.
+        }
+    }
+    val text = clip.getItemAt(0).coerceToText(context)?.toString().orEmpty()
+    if (text.isBlank()) return false
+    sendFromBackground(context, text)
+    return true
 }
