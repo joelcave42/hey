@@ -200,7 +200,23 @@ private fun HeyApp(activity: ComponentActivity) {
             addTile = if (Build.VERSION.SDK_INT >= 33) {
                 { addTile(activity) }
             } else null,
-            clearHistory = { History.clear(context) },
+            clearHistory = { deleteFiles ->
+                val deleted = if (deleteFiles) {
+                    history.orEmpty().filter { it.incoming && it.uri != null }.count { deleteReceived(context, it) }
+                } else 0
+                History.clear(context)
+                if (deleted > 0) say("Deleted $deleted file${if (deleted == 1) "" else "s"}")
+            },
+            deleteFile = { entry ->
+                if (deleteReceived(context, entry)) {
+                    History.remove(context, entry)
+                    say("Deleted ${entry.label}")
+                } else {
+                    History.remove(context, entry)
+                    say("It was already gone, so it's off the list now.")
+                }
+            },
+            removeEntry = { History.remove(context, it) },
             unpair = {
                 ReceiveService.setEnabled(context, false)
                 Pc.forget(context)
@@ -213,6 +229,13 @@ private fun HeyApp(activity: ComponentActivity) {
             },
         ),
     )
+}
+
+/** Deletes a file the PC sent from Download/Hey. Hey saved it, so Android lets it. */
+private fun deleteReceived(context: Context, entry: History.Entry): Boolean = try {
+    context.contentResolver.delete(Uri.parse(entry.uri ?: return false), null, null) > 0
+} catch (_: SecurityException) {
+    false
 }
 
 /** Whether Android may pause Hey in the background to save battery. */

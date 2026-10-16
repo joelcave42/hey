@@ -63,6 +63,12 @@ object History {
         add(context, Entry(kindOf(name), name, null, now(), incoming = true, uri = uri, mime = mime))
     }
 
+    fun remove(context: Context, entry: Entry) {
+        val list = (entries(context).value ?: emptyList()) - entry
+        entries.value = list
+        save(context, list)
+    }
+
     fun clear(context: Context) {
         entries.value = emptyList()
         save(context, emptyList())

@@ -114,6 +114,8 @@ header h1 { font: 700 26px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif
 .act:hover { background: color-mix(in srgb, var(--brand) 16%, var(--card-2)); color: var(--brand); }
 .act.primary { background: var(--brand); color: #fff; }
 .act.primary:hover { filter: brightness(1.08); color: #fff; }
+.act.danger { color: var(--bad); }
+.act.danger:hover { background: color-mix(in srgb, var(--bad) 14%, var(--card-2)); color: var(--bad); }
 .item .remove { position: absolute; top: 10px; right: 10px; opacity: 0; color: var(--faint); padding: 5px; border-radius: 8px; }
 .item:hover .remove { opacity: 1; }
 .item .remove:hover { background: var(--card-2); color: var(--bad); }
@@ -169,7 +171,7 @@ header h1 { font: 700 26px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif
 <main>
   <header>
     <h1>Activity</h1>
-    <button class="chip-btn" id="clear" onclick="if(confirm('Clear the list? Files stay where they were saved.'))send('clear')">Clear</button>
+    <button class="chip-btn" id="clear" onclick="askClear()">Clear</button>
     <label class="search"><svg class="i"><use href="#search"/></svg><input id="q" placeholder="Search" oninput="render()"></label>
   </header>
   <div class="composer" id="composer">
@@ -186,6 +188,7 @@ header h1 { font: 700 26px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif
   <div class="feed" id="feed"></div>
 </main>
 <div id="layer"></div>
+<div id="dialog"></div>
 <div class="drop" id="drop"><div><svg class="i"><use href="#send"/></svg><b>Drop to send to your phone</b></div></div>
 
 <svg width="0" height="0" style="position:absolute">
@@ -202,6 +205,7 @@ header h1 { font: 700 26px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif
   <symbol id="copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
   <symbol id="open" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
   <symbol id="folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></symbol>
   <symbol id="x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
   <symbol id="map" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></symbol>
   <symbol id="send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></symbol>
@@ -296,7 +300,8 @@ function itemHtml(it) {
   } else {
     title = `<div class="title">${esc(it.name)}</div>`;
     body = `<div class="sub">${k.word} · ${size(it.size)}</div>`;
-    acts = btn("open", "Open", "open", true) + (it.kind === "photo" ? btn("copy", "Copy", "copy") : "") + btn("reveal", "Show in folder", "folder");
+    acts = btn("open", "Open", "open", true) + (it.kind === "photo" ? btn("copy", "Copy", "copy") : "") + btn("reveal", "Show in folder", "folder")
+      + (it.deletable ? `<button class="act danger" title="Move to the Recycle Bin" onclick="send('deleteFile',{id:${it.id}})">${icon("trash")}Delete</button>` : "");
   }
   return `<div class="item">${lead}<div class="body">${title}${body}<div class="sub">${meta}</div><div class="actions">${acts}</div></div>
     <button class="remove" title="Remove from list" onclick="send('remove',{id:${it.id}})">${icon("x")}</button></div>`;
@@ -357,6 +362,19 @@ function render() {
 }
 
 let timer;
+function askClear() {
+  const files = state.items.filter(i => i.deletable).length;
+  document.getElementById("dialog").innerHTML = `<div class="overlay" onclick="if(event.target===this)closeLayer()"><div class="modal" style="width:380px">
+    <h2>Clear the list?</h2>
+    <p>${files ? `${files} received file${files === 1 ? "" : "s"} can be deleted too. They go to the Recycle Bin.` : "Files stay where they were saved."}</p>
+    <div class="row2" style="flex-direction:column">
+      <button class="act primary" style="justify-content:center;padding:10px" onclick="send('clear');closeLayer()">Clear the list</button>
+      ${files ? `<button class="act danger" style="justify-content:center;padding:10px" onclick="send('clear',{deleteFiles:true});closeLayer()">${icon("trash")}Clear and delete received files</button>` : ""}
+      <button class="act" style="justify-content:center;padding:10px" onclick="closeLayer()">Cancel</button>
+    </div></div></div>`;
+}
+function closeLayer() { document.getElementById("dialog").innerHTML = ""; }
+
 function renderPairing() {
   const layer = document.getElementById("layer");
   const p = state.pairing;

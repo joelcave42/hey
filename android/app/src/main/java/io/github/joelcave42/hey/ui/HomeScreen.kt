@@ -33,6 +33,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.BatteryAlert
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -122,7 +124,12 @@ class HomeActions(
     val allowBackground: () -> Unit,
     val rename: (String) -> Unit,
     val addTile: (() -> Unit)?,
-    val clearHistory: () -> Unit,
+    /** Clears Activity; with true, also deletes files received from the PC. */
+    val clearHistory: (deleteFiles: Boolean) -> Unit,
+    /** Deletes a file received from the PC from the phone. */
+    val deleteFile: (History.Entry) -> Unit,
+    /** Removes an item from Activity without touching any file. */
+    val removeEntry: (History.Entry) -> Unit,
     val unpair: () -> Unit,
     val setReceiving: (Boolean) -> Unit,
 )
@@ -144,6 +151,7 @@ fun HomeScreen(
 ) {
     var typing by rememberSaveable { mutableStateOf(false) }
     var filter by rememberSaveable { mutableStateOf(Filter.All) }
+    var clearing by rememberSaveable { mutableStateOf(false) }
     var renaming by rememberSaveable { mutableStateOf(false) }
     var confirmUnpair by rememberSaveable { mutableStateOf(false) }
 
@@ -154,7 +162,7 @@ fun HomeScreen(
             TopBar(
                 onRename = { renaming = true },
                 addTile = actions.addTile,
-                clearHistory = actions.clearHistory.takeIf { history.isNotEmpty() },
+                clearHistory = { clearing = true }.takeIf { history.isNotEmpty() },
                 onUnpair = { confirmUnpair = true },
             )
         },
@@ -220,6 +228,30 @@ fun HomeScreen(
 
     if (typing) TypeSheet(onDismiss = { typing = false }, onSend = { actions.sendText(it); typing = false })
     if (renaming) RenameDialog(pc.label, onDismiss = { renaming = false }, onRename = { actions.rename(it); renaming = false })
+    if (clearing) {
+        val files = history.count { it.incoming && it.uri != null }
+        AlertDialog(
+            onDismissRequest = { clearing = false },
+            title = { Text("Clear activity?") },
+            text = {
+                Text(
+                    if (files > 0) "$files file${if (files == 1) "" else "s"} from your PC can be deleted from this phone too."
+                    else "Files stay where they were saved."
+                )
+            },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = { clearing = false; actions.clearHistory(false) }) { Text("Clear the list") }
+                    if (files > 0) {
+                        TextButton(onClick = { clearing = false; actions.clearHistory(true) }) {
+                            Text("Clear and delete files", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    TextButton(onClick = { clearing = false }) { Text("Cancel") }
+                }
+            },
+        )
+    }
     if (confirmUnpair) {
         AlertDialog(
             onDismissRequest = { confirmUnpair = false },
@@ -270,7 +302,7 @@ private fun TopBar(onRename: () -> Unit, addTile: (() -> Unit)?, clearHistory: (
                 }
                 if (clearHistory != null) {
                     DropdownMenuItem(
-                        text = { Text("Clear recent") },
+                        text = { Text("Clear activity") },
                         leadingIcon = { Icon(Icons.Rounded.DeleteSweep, null) },
                         onClick = { menu = false; clearHistory() },
                     )
@@ -536,6 +568,26 @@ private fun ActivityRow(entry: History.Entry, actions: HomeActions) {
             if (action != null) {
                 IconButton(onClick = onAction) {
                     Icon(action.first, action.second, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Box {
+                var menu by remember { mutableStateOf(false) }
+                IconButton(onClick = { menu = true }) {
+                    Icon(Icons.Rounded.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    if (entry.incoming && entry.uri != null) {
+                        DropdownMenuItem(
+                            text = { Text("Delete file", color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Rounded.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = { menu = false; actions.deleteFile(entry) },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Remove from list") },
+                        leadingIcon = { Icon(Icons.Rounded.Close, null) },
+                        onClick = { menu = false; actions.removeEntry(entry) },
+                    )
                 }
             }
         }

@@ -350,7 +350,11 @@ impl App {
                 "custom_folder": config.save_folder.is_some(),
                 "tailscale": net::tailscale_ip(),
             },
-            "items": self.feed.items,
+            "items": self.feed.items.iter().map(|item| {
+                let mut value = json!(item);
+                value["deletable"] = json!(deletable(item).is_some());
+                value
+            }).collect::<Vec<_>>(),
             "pairing": self.pairing.as_ref().map(|(link, expires)| json!({
                 "qr": pairing::qr_svg(link),
                 "link": link,
@@ -455,8 +459,34 @@ impl App {
                 None
             }
             ("clear", _) => {
+                let delete_files = request["deleteFiles"].as_bool() == Some(true);
+                let paths: Vec<PathBuf> = if delete_files {
+                    self.feed.items.iter().filter_map(deletable).collect()
+                } else {
+                    Vec::new()
+                };
                 self.feed.clear();
-                None
+                if paths.is_empty() {
+                    return None;
+                }
+                match trash::delete_all(&paths) {
+                    Ok(()) => Some(format!(
+                        "Moved {} file{} to the Recycle Bin",
+                        paths.len(),
+                        if paths.len() == 1 { "" } else { "s" }
+                    )),
+                    Err(e) => Some(format!("Couldn't delete some files: {e}")),
+                }
+            }
+            ("deleteFile", Some(item)) => {
+                let path = deletable(&item)?;
+                match trash::delete(&path) {
+                    Ok(()) => {
+                        self.feed.remove(item.id);
+                        Some("Moved to the Recycle Bin".into())
+                    }
+                    Err(e) => Some(format!("Couldn't delete it: {e}")),
+                }
             }
             ("remove", Some(item)) => {
                 self.feed.remove(item.id);
@@ -693,6 +723,24 @@ fn run_action(link: &str) {
         }
         _ => {}
     }
+}
+
+/// The file behind a feed item, if it's one Hey saved and may delete: things
+/// received from a phone (in the save folder) and screenshots Hey made to
+/// send. Your own files that you sent are never deletable from Hey.
+fn deletable(item: &feed::Item) -> Option<PathBuf> {
+    let path = PathBuf::from(item.path.as_deref()?).canonicalize().ok()?;
+    let ours = [
+        files::folder(),
+        files::default_folder(),
+        config::dir().join("outgoing"),
+    ];
+    let inside = ours
+        .iter()
+        .filter_map(|dir| dir.canonicalize().ok())
+        .any(|dir| path.starts_with(dir));
+    let made_by_hey = !item.outgoing || path.starts_with(config::dir().canonicalize().ok()?);
+    (inside && made_by_hey && path.is_file()).then_some(path)
 }
 
 fn file_name(path: &Path) -> String {
