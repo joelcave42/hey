@@ -325,7 +325,7 @@ fn stream_frames(stream: &mut Tls, mailbox: &Mailbox, quality: Quality) -> io::R
 /// processor.
 enum VideoEncoder {
     Hardware(crate::hwenc::HwEncoder),
-    Software(Encoder),
+    Software(Box<Encoder>),
 }
 
 impl VideoEncoder {
@@ -348,7 +348,7 @@ impl VideoEncoder {
             .intra_frame_period(IntraFramePeriod::from_num_frames(SOFTWARE.fps * 4))
             .skip_frames(false);
         Encoder::with_api_config(OpenH264API::from_source(), config)
-            .map(VideoEncoder::Software)
+            .map(|e| VideoEncoder::Software(Box::new(e)))
             .map_err(io::Error::other)
     }
 
