@@ -11,6 +11,7 @@ mod control;
 mod feed;
 mod files;
 mod icon;
+mod net;
 mod pairing;
 mod push;
 mod server;
@@ -347,6 +348,7 @@ impl App {
                 "autostart": winutil::starts_with_windows(),
                 "folder": files::folder().to_string_lossy(),
                 "custom_folder": config.save_folder.is_some(),
+                "tailscale": net::tailscale_ip(),
             },
             "items": self.feed.items,
             "pairing": self.pairing.as_ref().map(|(link, expires)| json!({
@@ -507,7 +509,9 @@ impl App {
             }
             ("openUrl", _) => {
                 let url = request["url"].as_str()?;
-                if url.starts_with("https://github.com/joelcave42/") {
+                if url.starts_with("https://github.com/joelcave42/")
+                    || url == "https://tailscale.com/download"
+                {
                     winutil::open(url);
                 }
                 None

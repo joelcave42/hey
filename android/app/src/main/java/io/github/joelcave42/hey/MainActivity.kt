@@ -71,6 +71,7 @@ private fun HeyApp(activity: ComponentActivity) {
     var pairing by remember { mutableStateOf(false) }
     val history by History.entries(context).collectAsState()
     val receiveConnected by ReceiveService.connected.collectAsState()
+    val receiveAway by ReceiveService.away.collectAsState()
     var receiving by remember { mutableStateOf(ReceiveService.isEnabled(context)) }
     var batteryLimited by remember { mutableStateOf(batteryLimited(context)) }
 
@@ -148,6 +149,7 @@ private fun HeyApp(activity: ComponentActivity) {
         history = history.orEmpty(),
         receiving = receiving,
         receiveConnected = receiveConnected,
+        receiveAway = receiveAway,
         batteryLimited = batteryLimited,
         snackbar = snackbar,
         actions = HomeActions(

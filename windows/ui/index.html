@@ -65,6 +65,8 @@ aside { background: var(--side); border-right: 1px solid var(--line); display: f
 .folder-row small { white-space: normal !important; word-break: break-all; }
 .reset { color: var(--brand); font-size: 12px; font-weight: 600; padding: 2px 0 0; }
 .reset:hover { text-decoration: underline; }
+.away-info { display: none; margin: 0 8px 8px; padding: 10px 12px; border-radius: 10px; background: var(--card); color: var(--muted); font-size: 12.5px; }
+.away-info.show { display: block; }
 .folder-btns { display: flex; gap: 6px; padding: 0 8px 8px; flex-wrap: wrap; }
 .foot { margin-top: auto; padding: 16px 8px 0; font-size: 12px; color: var(--faint); display: flex; justify-content: space-between; }
 .foot a { color: var(--faint); cursor: pointer; text-decoration: none; }
@@ -153,6 +155,14 @@ header h1 { font: 700 26px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif
     <div class="row"><div class="t">Start with Windows<small>Hey waits in the tray</small></div><button class="switch" id="autostart" onclick="toggle('autostart')" aria-label="Start with Windows"></button></div>
     <div class="row folder-row"><div class="t">Save files to<small id="folderPath" title=""></small><button class="reset" id="resetFolder" onclick="send('resetFolder')">Back to Downloads\Hey</button></div></div>
     <div class="folder-btns"><button class="chip-btn" onclick="send('chooseFolder')">Change…</button><button class="chip-btn" onclick="send('openFolder')">Open</button></div>
+    <div class="row"><div class="t">Away from home<small id="awayStatus"></small></div><span class="dot" id="awayDot"></span></div>
+    <div class="folder-btns" id="awayHelp">
+      <button class="chip-btn" onclick="send('openUrl',{url:'https://tailscale.com/download'})">Get Tailscale (free)</button>
+      <button class="chip-btn" onclick="toggleAwayInfo()">How it works</button>
+    </div>
+    <div class="away-info" id="awayInfo">
+      Install <b>Tailscale</b> on this PC and your phone, and sign in to the same account on both. Hey then reaches your PC over mobile data or any Wi-Fi. It's free, and Hey's own encryption stays on.
+    </div>
   </div>
   <div class="foot"><span id="version"></span><a onclick="send('openUrl',{url:'https://github.com/joelcave42/hey'})">GitHub</a></div>
 </aside>
@@ -214,6 +224,7 @@ const FILTERS = [["all", "All"], ["link", "Links"], ["photo", "Photos"], ["file"
 
 function send(cmd, extra) { window.ipc.postMessage(JSON.stringify({ cmd, ...extra })); }
 function toggle(key) { send("set", { key, value: !state.settings[key] }); }
+function toggleAwayInfo() { document.getElementById("awayInfo").classList.toggle("show"); }
 function sendMsg() {
   const box = document.getElementById("msg");
   if (!box.value.trim()) return;
@@ -309,6 +320,10 @@ function render() {
       <button class="forget" title="Forget this phone" onclick='send("forget",{name:${JSON.stringify(d.name)}})'>${icon("x")}</button></div>`;
   }).join("") : `<div class="row" style="color:var(--faint)">No phones yet</div>`;
 
+  const ts = s.settings.tailscale;
+  document.getElementById("awayStatus").textContent = ts ? `On · Tailscale ${ts}` : "Off · needs Tailscale";
+  document.getElementById("awayDot").classList.toggle("on", !!ts);
+  document.getElementById("awayHelp").style.display = ts ? "none" : "";
   const ready = s.devices.some(d => d.connected);
   document.getElementById("composer").classList.toggle("off", !ready);
   const hint = document.getElementById("hint");

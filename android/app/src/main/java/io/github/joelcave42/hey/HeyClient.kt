@@ -30,6 +30,14 @@ class HeyClient(private val context: Context) {
 
     class HeyException(message: String) : Exception(message)
 
+    companion object {
+        /** Tailscale addresses are in 100.64.0.0/10. */
+        fun isTailscale(host: String): Boolean {
+            val parts = host.split('.').mapNotNull { it.toIntOrNull() }
+            return parts.size == 4 && parts[0] == 100 && parts[1] in 64..127
+        }
+    }
+
     /** Pairs with a PC from its QR code and saves it. Returns the saved PC. */
     fun pair(pc: Pc, key: String): Pc {
         val reply = request(pc, JSONObject().put("t", "pair").put("key", key).put("device", deviceName()))
@@ -78,14 +86,19 @@ class HeyClient(private val context: Context) {
 
     /** Tries the PC's known addresses, then looks for it on the network if they've changed. */
     private fun request(pc: Pc, body: JSONObject, payload: ((OutputStream) -> Unit)? = null): JSONObject {
-        return connectAny(pc) { host, port -> exchange(host, port, pc.fingerprint, body, payload) }
+        val reply = connectAny(pc) { host, port -> exchange(host, port, pc.fingerprint, body, payload) }
+        learn(pc, reply.optJSONArray("ips"))
+        return reply
     }
 
-    /** Runs [attempt] against each known address, then wherever mDNS says the PC is now. */
+    /**
+     * Runs [attempt] against each known address (the one that worked last
+     * comes first), then wherever mDNS says the PC is now on this network.
+     */
     private fun <T> connectAny(pc: Pc, attempt: (host: String, port: Int) -> T): T {
         for (address in pc.addresses) {
             try {
-                return attempt(address, pc.port)
+                return attempt(address, pc.port).also { remember(pc, address, pc.port) }
             } catch (e: HeyException) {
                 throw e
             } catch (_: IOException) {
@@ -93,7 +106,8 @@ class HeyClient(private val context: Context) {
             }
         }
         val found = discover(pc) ?: throw HeyException(
-            "Can't find ${pc.name}. Make sure Hey is running on it and you're on the same Wi-Fi."
+            "Can't find ${pc.name}. Make sure Hey is running on it, and that you're on the same Wi-Fi " +
+                "or both have Tailscale on."
         )
         val result = try {
             attempt(found.first, found.second)
@@ -102,17 +116,38 @@ class HeyClient(private val context: Context) {
         } catch (_: IOException) {
             throw HeyException("Found ${pc.name} but couldn't connect. Check Windows Firewall allows Hey.")
         }
-        if (pc.token.isNotEmpty()) {
-            pc.copy(addresses = listOf(found.first) + (pc.addresses - found.first), port = found.second).save(context)
-        }
+        remember(pc, found.first, found.second)
         return result
+    }
+
+    /** Puts the address that just worked first, so it's tried first next time. */
+    private fun remember(pc: Pc, host: String, port: Int) = updateSaved(pc) {
+        it.copy(addresses = listOf(host) + (it.addresses - host), port = port)
+    }
+
+    /**
+     * Adds addresses the PC reported (a Tailscale one appears after Tailscale is
+     * installed), keeping the ones that work first.
+     */
+    private fun learn(pc: Pc, ips: org.json.JSONArray?) {
+        if (ips == null) return
+        val reported = (0 until ips.length()).map { ips.getString(it) }
+        updateSaved(pc) { it.copy(addresses = (it.addresses + reported).distinct()) }
+    }
+
+    /** Changes the saved PC, if [pc] is the one that's saved and paired. */
+    private fun updateSaved(pc: Pc, change: (Pc) -> Pc) {
+        val saved = Pc.load(context) ?: return
+        if (pc.token.isEmpty() || saved.id != pc.id) return
+        val updated = change(saved)
+        if (updated != saved) updated.save(context)
     }
 
     /**
      * An open connection the PC pushes things down (see push.rs on the PC).
      * Lines are JSON; a file's bytes follow its line on the same stream.
      */
-    class Listener(private val socket: SSLSocket) : AutoCloseable {
+    class Listener(private val socket: SSLSocket, val host: String) : AutoCloseable {
         val input = BufferedInputStream(socket.inputStream, 64 * 1024)
         private val output = BufferedOutputStream(socket.outputStream)
 
@@ -144,13 +179,14 @@ class HeyClient(private val context: Context) {
         raw.keepAlive = true
         val tls = pinnedContext(pc.fingerprint).socketFactory.createSocket(raw, host, port, true) as SSLSocket
         tls.startHandshake()
-        val listener = Listener(tls)
+        val listener = Listener(tls, host)
         listener.send(JSONObject().put("t", "listen").put("token", pc.token))
         val reply = JSONObject(listener.readLine() ?: throw IOException("No reply"))
         if (!reply.optBoolean("ok")) {
             listener.close()
             throw HeyException(reply.optString("error", "Your PC said no."))
         }
+        learn(pc, reply.optJSONArray("ips"))
         listener
     }
 

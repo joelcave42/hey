@@ -47,6 +47,10 @@ class ReceiveService : Service() {
         /** Whether the PC can reach the phone right now, for the app's status. */
         val connected: StateFlow<Boolean> = _connected
 
+        private val _away = MutableStateFlow(false)
+        /** Connected through Tailscale rather than the home network. */
+        val away: StateFlow<Boolean> = _away
+
         fun isEnabled(context: Context) =
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("enabled", true)
 
@@ -110,6 +114,7 @@ class ReceiveService : Service() {
             try {
                 HeyClient(this).listen(pc).use { listener ->
                     current = listener
+                    _away.value = HeyClient.isTailscale(listener.host)
                     setConnected(true, pc)
                     backoff = 2_000L
                     serve(listener)
@@ -241,7 +246,13 @@ class ReceiveService : Service() {
         return Notification.Builder(this, STATUS_CHANNEL)
             .setSmallIcon(R.drawable.ic_tile)
             .setContentTitle(if (on) "Ready to receive from $name" else "Waiting for $name")
-            .setContentText(if (on) "Send from the Hey window on your PC" else "Hey connects when your PC is on the same Wi-Fi")
+            .setContentText(
+                when {
+                    on && _away.value -> "Away from home, through Tailscale"
+                    on -> "Send from the Hey window on your PC"
+                    else -> "Connects on the same Wi-Fi, or anywhere with Tailscale"
+                }
+            )
             .setContentIntent(activity(launchApp()))
             .setOngoing(true)
             .setShowWhen(false)

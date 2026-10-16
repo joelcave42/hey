@@ -6,7 +6,7 @@
 //!   {"t":"text","token":"...","text":"..."}            -> {"ok":true}
 //!   {"t":"file","token":"...","name":"IMG_1.jpg","size":N,"index":0,"count":1}
 //!       followed by exactly N bytes                    -> {"ok":true}
-//!   {"t":"ping","token":"..."}                         -> {"ok":true,"name":"PC"}
+//!   {"t":"ping","token":"..."}                         -> {"ok":true,"name":"PC","ips":[...]}
 //!   {"t":"listen","token":"..."}  keeps the connection open for PC → phone (see push.rs)
 
 use crate::config::{self, Config, Device};
@@ -208,7 +208,9 @@ fn respond(request: &Value, shared: &Shared, events: &Sender<Event>) -> Value {
             } else {
                 let _ = events.send(Event::Seen);
             }
-            json!({"ok": true, "name": name})
+            // The phone keeps its list of this PC's addresses up to date from
+            // this, so it learns a new Tailscale address without re-pairing.
+            json!({"ok": true, "name": name, "ips": crate::net::addresses()})
         }
         _ => json!({"ok": false, "error": "Unknown request. Update Hey on your phone."}),
     }

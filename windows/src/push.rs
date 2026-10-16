@@ -58,7 +58,7 @@ pub fn serve(
     let result = (|| -> io::Result<()> {
         write_line(
             reader,
-            &json!({"ok": true, "name": crate::config::pc_name()}),
+            &json!({"ok": true, "name": crate::config::pc_name(), "ips": crate::net::addresses()}),
         )?;
         reader
             .get_ref()

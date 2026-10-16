@@ -135,6 +135,8 @@ fun HomeScreen(
     history: List<History.Entry>,
     receiving: Boolean,
     receiveConnected: Boolean,
+    /** Connected through Tailscale, away from home. */
+    receiveAway: Boolean,
     /** Android is limiting Hey in the background, so receiving may stop. */
     batteryLimited: Boolean,
     snackbar: SnackbarHostState,
@@ -168,7 +170,7 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { PcCard(pc, status, onClick = actions.retry) }
-            item { ReceiveRow(receiving, receiveConnected, actions.setReceiving) }
+            item { ReceiveRow(receiving, receiveConnected, receiveAway, actions.setReceiving) }
             if (receiving && batteryLimited) {
                 item { BatteryCard(actions.allowBackground) }
             }
@@ -363,7 +365,7 @@ private fun StatusLine(status: Status) {
 }
 
 @Composable
-private fun ReceiveRow(on: Boolean, connected: Boolean, onChange: (Boolean) -> Unit) {
+private fun ReceiveRow(on: Boolean, connected: Boolean, away: Boolean, onChange: (Boolean) -> Unit) {
     Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceContainer, onClick = { onChange(!on) }) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -386,6 +388,7 @@ private fun ReceiveRow(on: Boolean, connected: Boolean, onChange: (Boolean) -> U
                 Text(
                     when {
                         !on -> "Off"
+                        connected && away -> "Ready · away from home (Tailscale)"
                         connected -> "Ready · send from the Hey window"
                         else -> "Waiting for your PC…"
                     },

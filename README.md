@@ -43,6 +43,10 @@ notification that opens the link.
 - **Always ready:** with **Receive from PC** on, the phone keeps a quiet
   connection to your PC (with a small notification), reconnects on its own,
   and starts again after a restart.
+- **Away from home:** install [Tailscale](https://tailscale.com/download)
+  (free) on your PC and phone and sign in to the same account. Hey then
+  reaches your PC over mobile data or any Wi-Fi, with no servers of ours in
+  between. The phone learns the PC's Tailscale address on its own.
 - **The Hey window on your PC:** click the tray icon to see everything you've
   received, with photo thumbnails, search and filters, and Open / Copy / Show
   in folder on each item. Your phones and settings are in the sidebar, and
@@ -68,8 +72,10 @@ notification that opens the link.
   certificate from the QR code, so nothing else on the network can pose as
   your PC. The PC only accepts tokens from phones it paired with, and stores
   their SHA-256 hashes, never the tokens themselves.
-- **No servers.** Phone and PC talk directly over your local network. If the
-  PC's IP address changes, the phone finds it again with mDNS.
+- **No servers.** Phone and PC talk directly over your local network, or over
+  Tailscale when you're away. If the PC's IP address changes, the phone finds
+  it again with mDNS, and the PC tells the phone its current addresses every
+  time they connect.
 
 ## Install
 
@@ -103,6 +109,7 @@ Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
 | Path | What's there |
 | --- | --- |
 | `windows/src/server.rs` | TLS listener, pairing and request handling |
+| `windows/src/net.rs` | This PC's addresses, including Tailscale's |
 | `windows/src/push.rs` | PC → phone over the phone's always-open connection |
 | `windows/src/control.rs` | Lets Explorer's Send to phone reach the running Hey |
 | `windows/src/actions.rs` | Spots codes, links, addresses, emails and phone numbers |
@@ -156,7 +163,7 @@ Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
 - [ ] Several phones and PCs, and choosing where to send
 
 **v1.0: ship it**
-- [ ] Works away from home Wi-Fi (through Tailscale, still no servers)
+- [x] Works away from home Wi-Fi (through Tailscale, still no servers)
 - [ ] Windows installer, APK on GitHub Releases, auto-updates
 - [ ] Home screen widget and Samsung Edge panel
 
