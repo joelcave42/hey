@@ -8,6 +8,7 @@
 //!       followed by exactly N bytes                    -> {"ok":true}
 //!   {"t":"ping","token":"..."}                         -> {"ok":true,"name":"PC","ips":[...]}
 //!   {"t":"listen","token":"..."}  keeps the connection open for PC → phone (see push.rs)
+//!   {"t":"windows","token":"..."} / {"t":"view",...}  remote viewing (see view.rs)
 
 use crate::config::{self, Config, Device};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
@@ -22,6 +23,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 pub const PORT: u16 = 47820;
+/// Developer mode's port, so it can run next to the installed Hey.
+pub const DEV_PORT: u16 = 47821;
 const MAX_REQUEST: u64 = 1 << 20;
 const PAIRING_WINDOW: Duration = Duration::from_secs(10 * 60);
 
@@ -60,8 +63,8 @@ pub struct Shared {
 }
 
 pub fn start(shared: Arc<Shared>, events: Sender<Event>) -> std::io::Result<u16> {
-    let listener =
-        TcpListener::bind(("0.0.0.0", PORT)).or_else(|_| TcpListener::bind(("0.0.0.0", 0)))?;
+    let listener = TcpListener::bind(("0.0.0.0", if config::dev_mode() { DEV_PORT } else { PORT }))
+        .or_else(|_| TcpListener::bind(("0.0.0.0", 0)))?;
     let port = listener.local_addr()?.port();
     let tls = Arc::new(tls_config(&shared.config.lock().unwrap()));
 
@@ -102,6 +105,23 @@ fn handle(
     let mut line = String::new();
     reader.by_ref().take(MAX_REQUEST).read_line(&mut line)?;
     let request: Value = serde_json::from_str(&line)?;
+    match request.get("t").and_then(Value::as_str) {
+        Some("windows") | Some("view") if device_for(&request, shared).is_none() => {
+            let stream = reader.into_inner();
+            stream.write_all(format!("{}\n", not_paired()).as_bytes())?;
+            return Ok(stream.flush()?);
+        }
+        Some("windows") => {
+            let stream = reader.into_inner();
+            stream.write_all(format!("{}\n", crate::view::list()).as_bytes())?;
+            return Ok(stream.flush()?);
+        }
+        Some("view") => {
+            let target = request["target"].as_str().unwrap_or("screen").to_string();
+            return Ok(crate::view::serve(&mut reader, &target)?);
+        }
+        _ => {}
+    }
     if request.get("t").and_then(Value::as_str) == Some("listen") {
         let Some(device) = device_for(&request, shared) else {
             let stream = reader.into_inner();

@@ -33,10 +33,17 @@ pub struct Config {
     pub save_folder: Option<String>,
 }
 
+/// Developer mode (HEY_DEV=1): a second, separate Hey for testing next to
+/// the installed one. It has its own settings folder and port, and leaves
+/// Windows settings (notifications, Explorer menu, startup) alone.
+pub fn dev_mode() -> bool {
+    std::env::var_os("HEY_DEV").is_some()
+}
+
 pub fn dir() -> PathBuf {
     let d = dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("Hey");
+        .join(if dev_mode() { "Hey-dev" } else { "Hey" });
     let _ = fs::create_dir_all(&d);
     d
 }

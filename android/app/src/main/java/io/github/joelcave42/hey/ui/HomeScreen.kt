@@ -122,6 +122,8 @@ class HomeActions(
     /** Copies received text to the phone's clipboard. */
     val copy: (History.Entry) -> Unit,
     val allowBackground: () -> Unit,
+    /** Opens the list of windows to watch. */
+    val watch: () -> Unit,
     val rename: (String) -> Unit,
     val addTile: (() -> Unit)?,
     /** Clears Activity; with true, also deletes files received from the PC. */
@@ -182,6 +184,7 @@ fun HomeScreen(
             if (receiving && batteryLimited) {
                 item { BatteryCard(actions.allowBackground) }
             }
+            item { WatchCard(actions.watch) }
             item { Spacer(Modifier.height(4.dp)) }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

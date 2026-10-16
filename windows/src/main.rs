@@ -16,6 +16,7 @@ mod pairing;
 mod push;
 mod server;
 mod url;
+mod view;
 mod window;
 mod winutil;
 
@@ -73,7 +74,12 @@ fn main() {
         return;
     }
 
-    let _instance = unsafe { CreateMutexW(None, true, w!(r"Local\HeyTraySingleInstance")) };
+    let mutex = if config::dev_mode() {
+        w!(r"Local\HeyTraySingleInstanceDev")
+    } else {
+        w!(r"Local\HeyTraySingleInstance")
+    };
+    let _instance = unsafe { CreateMutexW(None, true, mutex) };
     if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
         // Hey is already running: bring its window up instead.
         control::show();
@@ -82,9 +88,11 @@ fn main() {
 
     let icon_path = config::dir().join("icon.png");
     let _ = std::fs::write(&icon_path, icon::png(128));
-    winutil::register_app_id(&icon_path);
-    winutil::register_actions();
-    winutil::register_send_to_phone();
+    if !config::dev_mode() {
+        winutil::register_app_id(&icon_path);
+        winutil::register_actions();
+        winutil::register_send_to_phone();
+    }
 
     let config = config::Config::load_or_create();
     let first_run = config.devices.is_empty();
@@ -109,7 +117,11 @@ fn main() {
             return;
         }
     };
-    let _mdns = server::advertise(&pc_id, port);
+    let _mdns = if config::dev_mode() {
+        None
+    } else {
+        server::advertise(&pc_id, port)
+    };
     let forward = proxy.clone();
     std::thread::spawn(move || {
         for event in events {

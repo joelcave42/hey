@@ -172,15 +172,28 @@ class HeyClient(private val context: Context) {
     }
 
     /** Opens the always-ready connection. The PC pings every 25 seconds. */
-    fun listen(pc: Pc): Listener = connectAny(pc) { host, port ->
+    fun listen(pc: Pc): Listener =
+        openStream(pc, JSONObject().put("t", "listen").put("token", pc.token), readTimeout = 75_000)
+
+    /** What the phone can watch on the PC: `screens` and `windows`, each with id, title and app. */
+    fun windows(pc: Pc): JSONObject = request(pc, JSONObject().put("t", "windows").put("token", pc.token))
+
+    /** Starts streaming a window (or "screen"). Read frames from [Listener.input]; see view.rs on the PC. */
+    fun view(pc: Pc, target: String): Listener = openStream(
+        pc, JSONObject().put("t", "view").put("token", pc.token).put("target", target), readTimeout = 10_000,
+    )
+
+    /** Opens a long-lived connection: sends [body], checks the PC said ok, and hands it over. */
+    private fun openStream(pc: Pc, body: JSONObject, readTimeout: Int): Listener = connectAny(pc) { host, port ->
         val raw = Socket()
         raw.connect(InetSocketAddress(host, port), 1500)
-        raw.soTimeout = 75_000
+        raw.soTimeout = readTimeout
         raw.keepAlive = true
+        raw.tcpNoDelay = true
         val tls = pinnedContext(pc.fingerprint).socketFactory.createSocket(raw, host, port, true) as SSLSocket
         tls.startHandshake()
         val listener = Listener(tls, host)
-        listener.send(JSONObject().put("t", "listen").put("token", pc.token))
+        listener.send(body)
         val reply = JSONObject(listener.readLine() ?: throw IOException("No reply"))
         if (!reply.optBoolean("ok")) {
             listener.close()

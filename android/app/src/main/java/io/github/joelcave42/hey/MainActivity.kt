@@ -40,6 +40,8 @@ import io.github.joelcave42.hey.ui.HomeActions
 import io.github.joelcave42.hey.ui.HomeScreen
 import io.github.joelcave42.hey.ui.PairScreen
 import io.github.joelcave42.hey.ui.Status
+import io.github.joelcave42.hey.ui.WindowChoice
+import io.github.joelcave42.hey.ui.WindowPicker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -70,6 +72,9 @@ private fun HeyApp(activity: ComponentActivity) {
     var status by remember { mutableStateOf<Status>(Status.Checking) }
     var pairing by remember { mutableStateOf(false) }
     val history by History.entries(context).collectAsState()
+    var picking by remember { mutableStateOf(false) }
+    var choices by remember { mutableStateOf<List<WindowChoice>?>(null) }
+    var pickProblem by remember { mutableStateOf<String?>(null) }
     val receiveConnected by ReceiveService.connected.collectAsState()
     val receiveAway by ReceiveService.away.collectAsState()
     var receiving by remember { mutableStateOf(ReceiveService.isEnabled(context)) }
@@ -184,6 +189,25 @@ private fun HeyApp(activity: ComponentActivity) {
                 clipboard.setPrimaryClip(ClipData.newPlainText("From your PC", entry.text.orEmpty()))
                 if (Build.VERSION.SDK_INT < 33) say("Copied")
             },
+            watch = {
+                picking = true
+                choices = null
+                pickProblem = null
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) { runCatching { HeyClient(context).windows(current) } }
+                    result.onSuccess { reply ->
+                        val all = mutableListOf<WindowChoice>()
+                        for (key in listOf("screens", "windows")) {
+                            val list = reply.optJSONArray(key) ?: continue
+                            for (i in 0 until list.length()) {
+                                val w = list.getJSONObject(i)
+                                all += WindowChoice(w.getString("id"), w.getString("title"), w.optString("app"))
+                            }
+                        }
+                        choices = all
+                    }.onFailure { pickProblem = it.message ?: "Couldn't reach your PC." }
+                }
+            },
             allowBackground = {
                 @SuppressLint("BatteryLife")
                 val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
@@ -229,6 +253,18 @@ private fun HeyApp(activity: ComponentActivity) {
             },
         ),
     )
+
+    if (picking) {
+        WindowPicker(
+            choices = choices,
+            problem = pickProblem,
+            onPick = { choice ->
+                picking = false
+                ViewerActivity.start(context, choice.id, choice.title)
+            },
+            onDismiss = { picking = false },
+        )
+    }
 }
 
 /** Deletes a file the PC sent from Download/Hey. Hey saved it, so Android lets it. */

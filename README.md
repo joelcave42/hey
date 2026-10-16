@@ -49,6 +49,9 @@ notification that opens the link.
   (free) on your PC and phone and sign in to the same account. Hey then
   reaches your PC over mobile data or any Wi-Fi, with no servers of ours in
   between. The phone learns the PC's Tailscale address on its own.
+- **See your PC:** tap **See your PC** in the phone app, pick any window (or
+  the whole screen), and watch it live. The PC sends H.264 video only when
+  something changes, and skips stale frames instead of lagging.
 - **The Hey window on your PC:** click the tray icon to see everything you've
   received, with photo thumbnails, search and filters, and Open / Copy / Show
   in folder on each item. Your phones and settings are in the sidebar, and
@@ -121,6 +124,7 @@ Actions and attaches them to the release.
 | --- | --- |
 | `windows/src/server.rs` | TLS listener, pairing and request handling |
 | `windows/src/net.rs` | This PC's addresses, including Tailscale's |
+| `windows/src/view.rs` | Remote viewing: capture, H.264 encoding, streaming |
 | `windows/src/push.rs` | PC → phone over the phone's always-open connection |
 | `windows/src/control.rs` | Lets Explorer's Send to phone reach the running Hey |
 | `windows/src/actions.rs` | Spots codes, links, addresses, emails and phone numbers |
@@ -135,6 +139,7 @@ Actions and attaches them to the release.
 | `android/.../History.kt` | The Recent list, kept on the phone |
 | `android/.../HeyClient.kt` | Pinned TLS client and mDNS discovery |
 | `android/.../Send.kt` | Share target and clipboard sender |
+| `android/.../ViewerActivity.kt` | Plays the PC's live video with the hardware decoder |
 | `android/.../ReceiveService.kt` | Always ready to receive from the PC |
 | `android/.../SendService.kt` | Sends photos and files with a progress bar |
 | `android/.../HeyTileService.kt` | Quick settings tile |
@@ -182,7 +187,10 @@ Actions and attaches them to the release.
 - [ ] Home screen widget and Samsung Edge panel
 
 **Someday**
-- [ ] Stream a PC window to the phone
+- [x] Stream a PC window to the phone (view only)
+- [ ] Hardware video encoding on the graphics card
+- [ ] Control the PC from the phone: tap, scroll, type
+- [ ] Pinch to zoom and landscape viewing
 
 ## License
 
