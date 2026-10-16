@@ -36,6 +36,11 @@ pub enum Event {
     Paired {
         device: String,
     },
+    /// A phone started watching something on this PC.
+    Viewing {
+        device: String,
+        what: String,
+    },
     /// A paired phone checked in, connected or disconnected, so its status
     /// in the window should update.
     Seen,
@@ -118,8 +123,16 @@ fn handle(
         }
         Some("view") => {
             let target = request["target"].as_str().unwrap_or("screen").to_string();
-            return Ok(crate::view::serve(&mut reader, &target)?);
+            let device = device_for(&request, shared).unwrap_or_default();
+            return Ok(crate::view::serve(
+                &mut reader,
+                &target,
+                &device,
+                shared,
+                events,
+            )?);
         }
+        Some("input") => return serve_input(&request, reader, shared),
         _ => {}
     }
     if request.get("t").and_then(Value::as_str) == Some("listen") {
@@ -154,6 +167,59 @@ fn device_for(request: &Value, shared: &Shared) -> Option<String> {
     let name = device.name.clone();
     config.save();
     Some(name)
+}
+
+/// Carries out mouse and keyboard actions from a phone that's watching
+/// (see input.rs), one JSON line each, until it hangs up.
+fn serve_input(
+    request: &Value,
+    mut reader: BufReader<&mut StreamOwned<ServerConnection, TcpStream>>,
+    shared: &Shared,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let session = request["session"]
+        .as_str()
+        .and_then(|s| s.parse::<u64>().ok())
+        .and_then(crate::input::session);
+    let refusal = if device_for(request, shared).is_none() {
+        Some(not_paired())
+    } else if !shared.config.lock().unwrap().allow_control {
+        Some(json!({"ok": false, "error": "Control is turned off in Hey on your PC."}))
+    } else if session.is_none() {
+        Some(json!({"ok": false, "error": "That view has ended."}))
+    } else {
+        None
+    };
+    {
+        let stream = reader.get_mut();
+        let reply = refusal.clone().unwrap_or_else(|| json!({"ok": true}));
+        stream.write_all(format!("{reply}\n").as_bytes())?;
+        stream.flush()?;
+    }
+    let Some(target) = session.filter(|_| refusal.is_none()) else {
+        return Ok(());
+    };
+    reader
+        .get_ref()
+        .sock
+        .set_read_timeout(Some(Duration::from_secs(600)))?;
+    let id = request["session"]
+        .as_str()
+        .unwrap_or("")
+        .parse::<u64>()
+        .unwrap_or(0);
+    loop {
+        let mut line = String::new();
+        if reader.by_ref().take(1 << 16).read_line(&mut line)? == 0 {
+            return Ok(());
+        }
+        // Stop as soon as the view ends or control is turned off.
+        if crate::input::session(id).is_none() || !shared.config.lock().unwrap().allow_control {
+            return Ok(());
+        }
+        if let Ok(event) = serde_json::from_str::<Value>(&line) {
+            crate::input::handle(target, &event);
+        }
+    }
 }
 
 fn not_paired() -> Value {

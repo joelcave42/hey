@@ -219,7 +219,13 @@ fn shrink(bgra: &[u8], width: usize, height: usize, max_side: usize) -> RawFrame
 
 /// Streams the chosen window to the phone until it hangs up or the window
 /// closes.
-pub fn serve(reader: &mut BufReader<&mut Tls>, target: &str) -> io::Result<()> {
+pub fn serve(
+    reader: &mut BufReader<&mut Tls>,
+    target: &str,
+    device: &str,
+    shared: &crate::server::Shared,
+    events: &std::sync::mpsc::Sender<crate::server::Event>,
+) -> io::Result<()> {
     let quality = if hardware_available() {
         HARDWARE
     } else {
@@ -252,7 +258,26 @@ pub fn serve(reader: &mut BufReader<&mut Tls>, target: &str) -> io::Result<()> {
     };
     let control = started.map_err(|e| io::Error::other(e.to_string()))?;
 
-    let result = stream_frames(reader.get_mut(), &mailbox, quality);
+    let input_target = match target.parse::<isize>() {
+        Ok(hwnd) => crate::input::Target::Window(hwnd),
+        Err(_) => crate::input::Target::Screen,
+    };
+    let session = crate::input::open_session(input_target);
+    let what = match input_target {
+        crate::input::Target::Window(hwnd) => Window::from_raw_hwnd(hwnd as *mut std::ffi::c_void)
+            .title()
+            .unwrap_or_default(),
+        crate::input::Target::Screen => "your screen".into(),
+    };
+    let _ = events.send(crate::server::Event::Viewing {
+        device: device.to_string(),
+        what,
+    });
+    let allowed = shared.config.lock().unwrap().allow_control;
+    let reply = json!({"ok": true, "session": session.to_string(), "control": allowed});
+
+    let result = stream_frames(reader.get_mut(), &mailbox, quality, &reply);
+    crate::input::close_session(session);
     *mailbox.closed.lock().unwrap() = true;
     let _ = control.stop();
     result
@@ -275,8 +300,13 @@ fn settings<T: TryInto<GraphicsCaptureItemType>>(
     )
 }
 
-fn stream_frames(stream: &mut Tls, mailbox: &Mailbox, quality: Quality) -> io::Result<()> {
-    stream.write_all(format!("{}\n", json!({"ok": true})).as_bytes())?;
+fn stream_frames(
+    stream: &mut Tls,
+    mailbox: &Mailbox,
+    quality: Quality,
+    reply: &Value,
+) -> io::Result<()> {
+    stream.write_all(format!("{reply}\n").as_bytes())?;
     stream.flush()?;
     let mut encoder: Option<(VideoEncoder, usize, usize)> = None;
     let mut first = true;

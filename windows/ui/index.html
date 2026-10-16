@@ -154,6 +154,7 @@ header h1 { font: 700 26px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif
   <div class="settings">
     <div class="label">Settings</div>
     <div class="row"><div class="t">Open links automatically<small>Links open as they arrive</small></div><button class="switch" id="auto_open" onclick="toggle('auto_open')" aria-label="Open links automatically"></button></div>
+    <div class="row"><div class="t">Let phones control this PC<small>Click, scroll and type while watching</small></div><button class="switch" id="control" onclick="toggle('control')" aria-label="Let phones control this PC"></button></div>
     <div class="row"><div class="t">Start with Windows<small>Hey waits in the tray</small></div><button class="switch" id="autostart" onclick="toggle('autostart')" aria-label="Start with Windows"></button></div>
     <div class="row folder-row"><div class="t">Save files to<small id="folderPath" title=""></small><button class="reset" id="resetFolder" onclick="send('resetFolder')">Back to Downloads\Hey</button></div></div>
     <div class="folder-btns"><button class="chip-btn" onclick="send('chooseFolder')">Change…</button><button class="chip-btn" onclick="send('openFolder')">Open</button></div>
@@ -315,7 +316,7 @@ function render() {
   folderPath.title = s.settings.folder || "";
   document.getElementById("resetFolder").style.display = s.settings.custom_folder ? "" : "none";
   document.getElementById("clear").style.display = s.items.length ? "" : "none";
-  for (const key of ["auto_open", "autostart"]) document.getElementById(key).classList.toggle("on", !!s.settings[key]);
+  for (const key of ["auto_open", "autostart", "control"]) document.getElementById(key).classList.toggle("on", !!s.settings[key]);
 
   document.getElementById("devices").innerHTML = s.devices.length ? s.devices.map(d => {
     const active = d.connected || Date.now() - d.last_seen < 3 * 60 * 1000;

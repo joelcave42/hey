@@ -148,6 +148,8 @@ class HeyClient(private val context: Context) {
      * Lines are JSON; a file's bytes follow its line on the same stream.
      */
     class Listener(private val socket: SSLSocket, val host: String) : AutoCloseable {
+        /** What the PC said when the connection opened (a view's session number, for one). */
+        var reply: JSONObject = JSONObject()
         val input = BufferedInputStream(socket.inputStream, 64 * 1024)
         private val output = BufferedOutputStream(socket.outputStream)
 
@@ -183,6 +185,11 @@ class HeyClient(private val context: Context) {
         pc, JSONObject().put("t", "view").put("token", pc.token).put("target", target), readTimeout = 10_000,
     )
 
+    /** Opens the connection that carries taps, scrolls and typing for a view [session]. */
+    fun control(pc: Pc, session: String): Listener = openStream(
+        pc, JSONObject().put("t", "input").put("token", pc.token).put("session", session), readTimeout = 0,
+    )
+
     /** Opens a long-lived connection: sends [body], checks the PC said ok, and hands it over. */
     private fun openStream(pc: Pc, body: JSONObject, readTimeout: Int): Listener = connectAny(pc) { host, port ->
         val raw = Socket()
@@ -200,6 +207,7 @@ class HeyClient(private val context: Context) {
             throw HeyException(reply.optString("error", "Your PC said no."))
         }
         learn(pc, reply.optJSONArray("ips"))
+        listener.reply = reply
         listener
     }
 

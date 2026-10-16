@@ -31,6 +31,13 @@ pub struct Config {
     /// Where received files go, if not the default Downloads\Hey.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub save_folder: Option<String>,
+    /// Let a phone that's watching click, scroll and type on this PC.
+    #[serde(default = "yes")]
+    pub allow_control: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// Developer mode (HEY_DEV=1): a second, separate Hey for testing next to
@@ -86,6 +93,7 @@ impl Config {
             devices: Vec::new(),
             auto_open_links: false,
             save_folder: None,
+            allow_control: true,
         };
         config.save();
         config

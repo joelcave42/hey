@@ -12,6 +12,7 @@ mod feed;
 mod files;
 mod hwenc;
 mod icon;
+mod input;
 mod net;
 mod pairing;
 mod push;
@@ -58,6 +59,13 @@ struct App {
 }
 
 fn main() {
+    // Work in real screen pixels, so clicks from the phone land where they
+    // should on scaled displays.
+    unsafe {
+        let _ = windows::Win32::UI::HiDpi::SetProcessDpiAwarenessContext(
+            windows::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+        );
+    }
     // A notification button was clicked: do that one thing and exit.
     let args: Vec<String> = std::env::args().collect();
     if args.len() == 3 && args[1] == "--action" {
@@ -361,6 +369,7 @@ impl App {
                 "autostart": winutil::starts_with_windows(),
                 "folder": files::folder().to_string_lossy(),
                 "custom_folder": config.save_folder.is_some(),
+                "control": config.allow_control,
                 "tailscale": net::tailscale_ip(),
             },
             "items": self.feed.items.iter().map(|item| {
@@ -412,6 +421,16 @@ impl App {
                 Some(format!("Paired with {device}"))
             }
             Event::Seen => None,
+            Event::Viewing { device, what } => {
+                // Always say when a phone can see this PC.
+                let control = if self.shared.config.lock().unwrap().allow_control {
+                    "It can also click and type. Turn that off in Hey's settings."
+                } else {
+                    "View only."
+                };
+                winutil::notify_text(&format!("{device} is watching {what}"), control);
+                None
+            }
             Event::Delivered { id, error } => {
                 self.feed.set_delivered(id, error.clone());
                 error.map(|e| format!("Couldn't send to your phone: {e}"))
@@ -568,6 +587,11 @@ impl App {
                         config.save();
                     }
                     "autostart" => winutil::set_start_with_windows(on),
+                    "control" => {
+                        let mut config = self.shared.config.lock().unwrap();
+                        config.allow_control = on;
+                        config.save();
+                    }
                     _ => {}
                 }
                 None

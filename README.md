@@ -54,6 +54,11 @@ notification that opens the link.
   card (NVENC, Quick Sync or AMF through Media Foundation) at up to 1080p and
   60 fps, falling back to the processor on PCs without one. It sends video
   only when something changes, and skips stale frames instead of lagging.
+- **Use your PC from the phone:** while watching, tap to click (two quick taps
+  double-click), drag one finger to scroll, hold to right-click, hold then
+  drag to drag, and tap ⌨ to type. Two fingers zoom and move around. The PC
+  shows a notification whenever a phone starts watching, and **Let phones
+  control this PC** in the Hey window turns control off.
 - **The Hey window on your PC:** click the tray icon to see everything you've
   received, with photo thumbnails, search and filters, and Open / Copy / Show
   in folder on each item. Your phones and settings are in the sidebar, and
@@ -127,6 +132,7 @@ Actions and attaches them to the release.
 | `windows/src/server.rs` | TLS listener, pairing and request handling |
 | `windows/src/net.rs` | This PC's addresses, including Tailscale's |
 | `windows/src/hwenc.rs` | H.264 on the graphics card through Media Foundation |
+| `windows/src/input.rs` | Turns taps, scrolls and typing from the phone into mouse and keyboard input |
 | `windows/src/view.rs` | Remote viewing: capture, H.264 encoding, streaming |
 | `windows/src/push.rs` | PC → phone over the phone's always-open connection |
 | `windows/src/control.rs` | Lets Explorer's Send to phone reach the running Hey |
@@ -142,6 +148,7 @@ Actions and attaches them to the release.
 | `android/.../History.kt` | The Recent list, kept on the phone |
 | `android/.../HeyClient.kt` | Pinned TLS client and mDNS discovery |
 | `android/.../Send.kt` | Share target and clipboard sender |
+| `android/.../RemoteControl.kt` | Touch gestures and the control connection |
 | `android/.../ViewerActivity.kt` | Plays the PC's live video with the hardware decoder |
 | `android/.../ReceiveService.kt` | Always ready to receive from the PC |
 | `android/.../SendService.kt` | Sends photos and files with a progress bar |
@@ -192,8 +199,8 @@ Actions and attaches them to the release.
 **Someday**
 - [x] Stream a PC window to the phone (view only)
 - [x] Hardware video encoding on the graphics card (1080p, up to 60 fps)
-- [ ] Control the PC from the phone: tap, scroll, type
-- [ ] Pinch to zoom and landscape viewing
+- [x] Control the PC from the phone: tap, scroll, type
+- [x] Pinch to zoom, landscape viewing, and switching windows
 
 ## License
 
