@@ -50,8 +50,10 @@ notification that opens the link.
   reaches your PC over mobile data or any Wi-Fi, with no servers of ours in
   between. The phone learns the PC's Tailscale address on its own.
 - **See your PC:** tap **See your PC** in the phone app, pick any window (or
-  the whole screen), and watch it live. The PC sends H.264 video only when
-  something changes, and skips stale frames instead of lagging.
+  the whole screen), and watch it live. The PC encodes H.264 on its graphics
+  card (NVENC, Quick Sync or AMF through Media Foundation) at up to 1080p and
+  60 fps, falling back to the processor on PCs without one. It sends video
+  only when something changes, and skips stale frames instead of lagging.
 - **The Hey window on your PC:** click the tray icon to see everything you've
   received, with photo thumbnails, search and filters, and Open / Copy / Show
   in folder on each item. Your phones and settings are in the sidebar, and
@@ -124,6 +126,7 @@ Actions and attaches them to the release.
 | --- | --- |
 | `windows/src/server.rs` | TLS listener, pairing and request handling |
 | `windows/src/net.rs` | This PC's addresses, including Tailscale's |
+| `windows/src/hwenc.rs` | H.264 on the graphics card through Media Foundation |
 | `windows/src/view.rs` | Remote viewing: capture, H.264 encoding, streaming |
 | `windows/src/push.rs` | PC → phone over the phone's always-open connection |
 | `windows/src/control.rs` | Lets Explorer's Send to phone reach the running Hey |
@@ -188,7 +191,7 @@ Actions and attaches them to the release.
 
 **Someday**
 - [x] Stream a PC window to the phone (view only)
-- [ ] Hardware video encoding on the graphics card
+- [x] Hardware video encoding on the graphics card (1080p, up to 60 fps)
 - [ ] Control the PC from the phone: tap, scroll, type
 - [ ] Pinch to zoom and landscape viewing
 

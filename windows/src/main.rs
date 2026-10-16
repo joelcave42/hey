@@ -10,6 +10,7 @@ mod config;
 mod control;
 mod feed;
 mod files;
+mod hwenc;
 mod icon;
 mod net;
 mod pairing;
