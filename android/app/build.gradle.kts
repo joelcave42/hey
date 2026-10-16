@@ -11,8 +11,22 @@ android {
         applicationId = "io.github.joelcave42.hey"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
+    }
+
+    // Release builds are signed with a key that never goes in the repo: it's
+    // passed in through environment variables (GitHub Secrets on CI).
+    val keystore = System.getenv("HEY_KEYSTORE")
+    signingConfigs {
+        if (keystore != null) {
+            create("release") {
+                storeFile = file(keystore)
+                storePassword = System.getenv("HEY_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("HEY_KEY_ALIAS") ?: "hey"
+                keyPassword = System.getenv("HEY_KEYSTORE_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -20,6 +34,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            if (keystore != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 

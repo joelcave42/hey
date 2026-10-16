@@ -1,0 +1,78 @@
+name: Release
+
+# Pushing a tag like v0.4.0 builds Hey-Setup-0.4.0.exe and Hey-0.4.0.apk
+# and attaches them to the GitHub release for that tag.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build hey.exe
+        working-directory: windows
+        run: cargo build --release
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" installer\hey.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*.exe
+
+  android:
+    name: Android app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build the signed APK
+        working-directory: android
+        env:
+          HEY_KEYSTORE_BASE64: ${{ secrets.HEY_KEYSTORE_BASE64 }}
+          HEY_KEYSTORE_PASSWORD: ${{ secrets.HEY_KEYSTORE_PASSWORD }}
+        run: |
+          # The release key comes from encrypted repo secrets and only exists
+          # on this build machine for this run.
+          echo "$HEY_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/hey-release.jks"
+          export HEY_KEYSTORE="$RUNNER_TEMP/hey-release.jks"
+          ./gradlew assembleRelease --console=plain
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p ../dist
+          cp app/build/outputs/apk/release/app-release.apk "../dist/Hey-$version.apk"
+          rm "$RUNNER_TEMP/hey-release.jks"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/*.apk
+
+  release:
+    name: Attach to the release
+    needs: [windows, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Hey ${GITHUB_REF_NAME#v}" --notes "See the README for what's new."
+          gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber

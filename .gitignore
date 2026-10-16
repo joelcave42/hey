@@ -12,3 +12,7 @@ android/local.properties
 # Test client state (holds a real device token)
 tools/.fake_phone.json
 __pycache__/
+
+# Installer output
+dist/
+windows/target-dev/

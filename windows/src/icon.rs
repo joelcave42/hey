@@ -82,3 +82,15 @@ pub fn png(size: u32) -> Vec<u8> {
     }
     bytes
 }
+
+#[cfg(test)]
+mod tests {
+    /// Writes the icon at 256px for building hey.ico:
+    /// `HEY_ICON_OUT=icon-256.png cargo test write_icon -- --ignored`
+    #[test]
+    #[ignore]
+    fn write_icon() {
+        let out = std::env::var("HEY_ICON_OUT").unwrap_or_else(|_| "icon-256.png".into());
+        std::fs::write(out, super::png(256)).unwrap();
+    }
+}

@@ -2,6 +2,8 @@
 
 <h1 align="center">Hey</h1>
 
+<p align="center"><a href="https://github.com/joelcave42/hey/actions/workflows/ci.yml"><img src="https://github.com/joelcave42/hey/actions/workflows/ci.yml/badge.svg" alt="CI"></a> <a href="https://github.com/joelcave42/hey/releases/latest"><img src="https://img.shields.io/github/v/release/joelcave42/hey" alt="Latest release"></a></p>
+
 <p align="center"><b>Send links, text, photos and files between your Android phone and your Windows PC. One tap, no account, no cloud.</b></p>
 
 Your friend sends you a Zoom link on your phone, and you need it on your PC.
@@ -79,30 +81,39 @@ notification that opens the link.
 
 ## Install
 
-### Windows
+Download both from the [latest release](https://github.com/joelcave42/hey/releases/latest). They're free, with no account and no ads.
 
-Requires [Rust](https://rustup.rs).
+**Windows 10 or 11:** run `Hey-Setup-<version>.exe`. It installs just for you
+(no admin needed), adds Hey to the Start menu, and can start Hey when you sign
+in. When Windows Firewall asks, allow Hey on **private networks**.
+
+**Android 10 or later:** download `Hey-<version>.apk` on your phone and open
+it. Android asks you to allow installing from your browser the first time.
+Then open Hey, tap **Scan pairing code**, and scan the code in the Hey window
+on your PC.
+
+**Away from home (optional):** install [Tailscale](https://tailscale.com/download)
+on both and sign in to the same account.
+
+## Build from source
+
+Windows needs [Rust](https://rustup.rs):
 
 ```bash
 cd windows
 cargo build --release
 ```
 
-Run `windows/target/release/hey.exe`. Hey appears in the system tray and opens
-its window with a pairing code. When Windows Firewall asks, allow Hey on **private
-networks**. Tick **Start with Windows** in the tray menu to keep it running.
-
-### Android
-
-Requires the Android SDK (set `ANDROID_HOME`) and Java 17 or later.
+Android needs the Android SDK (set `ANDROID_HOME`) and Java 17 or later:
 
 ```bash
 cd android
 ./gradlew assembleDebug
 ```
 
-Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
-(Android 8 or later), open Hey and tap **Scan pairing code**.
+The installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php)
+from `installer/hey.iss`. Pushing a `v*` tag builds both downloads on GitHub
+Actions and attaches them to the release.
 
 ## Project layout
 
@@ -127,6 +138,8 @@ Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
 | `android/.../ReceiveService.kt` | Always ready to receive from the PC |
 | `android/.../SendService.kt` | Sends photos and files with a progress bar |
 | `android/.../HeyTileService.kt` | Quick settings tile |
+| `installer/hey.iss` | Windows installer |
+| `.github/workflows/` | Checks on every push; release builds on every tag |
 | `tools/fake_phone.py` | Tests the PC app without a phone |
 
 ## Roadmap
@@ -164,7 +177,8 @@ Install `android/app/build/outputs/apk/debug/app-debug.apk` on your phone
 
 **v1.0: ship it**
 - [x] Works away from home Wi-Fi (through Tailscale, still no servers)
-- [ ] Windows installer, APK on GitHub Releases, auto-updates
+- [x] Windows installer and APK on GitHub Releases
+- [ ] Auto-updates
 - [ ] Home screen widget and Samsung Edge panel
 
 **Someday**
